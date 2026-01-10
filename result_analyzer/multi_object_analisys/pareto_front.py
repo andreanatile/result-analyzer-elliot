@@ -64,6 +64,20 @@ def automated_mobj_report(
             data=df, x=acc_metric, y=b_metric, hue="Algorithm", style="Cutoff", s=100
         )
 
+        for idx, row in df.iterrows():
+            # Verifica che nn non sia NaN
+            if pd.notna(row['nn']):
+                plt.annotate(
+                    text="nn="+str(int(row['nn'])),  # Il testo (numero nn)
+                    xy=(row[acc_metric], row[b_metric]),  # La posizione del punto (pallino)
+                    xytext=(5, 5),  # L'offset: (x, y) in punti. Qui sposta 5pt a destra e 5pt in alto
+                    textcoords='offset points',  # Importante: dice che (5,5) sono punti fisici, non coordinate dati
+                    fontsize=9,
+                    alpha=0.9,
+                    color='black'
+                )
+
+
         for algo in df["Algorithm"].unique():
             algo_data = df[df["Algorithm"] == algo].copy()
             pareto_mask = identify_pareto(algo_data, acc_metric, b_metric)
