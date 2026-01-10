@@ -2,9 +2,19 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
+import shutil
 from pathlib import Path
 import itertools
 
+from result_analyzer.multi_object_analisys.kiwiat_plot import prepare_radar_data
+from result_analyzer.multi_object_analisys.kiwiat_plot import create_spider_plot
+
+
+def reset_directory(path):
+    """Elimina la cartella se esiste e la ricrea vuota."""
+    if path.exists() and path.is_dir():
+        shutil.rmtree(path)
+    path.mkdir(parents=True, exist_ok=True)
 
 def identify_pareto(df, x_col, y_col):
     """Returns a boolean array of points on the Pareto frontier (maximizing both)."""
@@ -20,10 +30,14 @@ def identify_pareto(df, x_col, y_col):
 def automated_mobj_report(
     df,
     plot_dir,
+    kiwiat_plot_dir,
     acc_metric="Recall",
     beyond_metrics=["ItemCoverage", "EPC"],
-    save=False,
+    save=True,
+    cutoff_for_radar=10
 ):
+
+
     # 1. Calculate Statistical Coefficients (Spearman Rho)
     stats = []
     for model in df["Algorithm"].unique():
@@ -79,6 +93,55 @@ def automated_mobj_report(
         plt.show()
 
     plt.close()  # Clean up memory
+
+    # 3. Integrazione Radar Chart (Kiwiat Plot)
+    df_radar_input = df[df["Cutoff"] == cutoff_for_radar].copy()
+    unique_algos = df["Algorithm"].unique()[:2]  # Prende i primi due (es. ItemkNN e UserkNN)
+
+    all_data_for_radar = []
+    all_labels_for_radar = []
+    radar_titles = []
+
+    for algo in unique_algos:
+        # Filtriamo per algoritmo e cutoff fisso
+        df_algo = df[(df["Algorithm"] == algo) & (df["Cutoff"] == cutoff_for_radar)].copy()
+
+        if not df_algo.empty:
+            # Prepariamo i dati (normalizzazione e inversione)
+            data_list, model_names, metrics_labels = prepare_radar_data(
+                df_algo, acc_metric, beyond_metrics[:2]
+            )
+
+            # data_list[0] contiene la matrice di tutti i 'nn' per questo algoritmo
+            all_data_for_radar.append(data_list[0])
+            all_labels_for_radar.append(model_names)
+            radar_titles.append(f"Model: {algo}")
+
+    # 2. Chiamata alla funzione con num_plots=2
+    if len(all_data_for_radar) == 2:
+        create_spider_plot(
+            data=all_data_for_radar,
+            models_by_plot=all_labels_for_radar,
+            metrics=metrics_labels,
+            titles=radar_titles,
+            num_plots=len(all_data_for_radar)
+        )
+
+        if save:
+            acc_subfolder = Path(kiwiat_plot_dir) / acc_metric
+            acc_subfolder.mkdir(parents=True, exist_ok=True)
+
+            # Salvataggio con nome file descrittivo
+            metrics_slug = "_".join(metrics_labels)
+            radar_path = acc_subfolder / f"Radar_{metrics_slug}.png"
+
+            # Salviamo l'ultima figura aperta (il radar)
+            plt.savefig(radar_path, dpi=300, bbox_inches='tight')
+            print(f"✅ Radar Chart salvato in: {radar_path.absolute()}")
+
+        plt.close()  # Chiude la figura del radar
+
+
     return stats_df
 
 
@@ -87,7 +150,12 @@ def mobj_pipeline(csv_path, accuracy_metrics, beyond_accuracy, save=False):
 
     # Create 'plots' folder in the parent of the performance folder
     plot_dir = csv_path.parent.parent / "plots"
-    plot_dir.mkdir(parents=True, exist_ok=True)
+    kiwiat_plot_dir = csv_path.parent.parent / "kiwiat_plots"
+
+    # Create the plot directories or reset them if already existing
+    reset_directory(plot_dir)
+    reset_directory(kiwiat_plot_dir)
+
 
     # Generate all unique couples of beyond accuracy metrics and convert in list form
     unique_couples_list = [
@@ -98,6 +166,12 @@ def mobj_pipeline(csv_path, accuracy_metrics, beyond_accuracy, save=False):
     if csv_path.exists():
         df_final = pd.read_csv(csv_path)
 
+        # Ordina per 'Algorithm' (opzionale) e poi per 'nn' in modo crescente
+        df_final = df_final.sort_values(by=['Algorithm', 'nn'], ascending=[True, True])
+
+        # Reset dell'indice per evitare problemi con i vecchi indici rimescolati
+        df_final = df_final.reset_index(drop=True)
+
         # Run analysis and save results
         for accuracy in accuracy_metrics:
             for beyond_pair in unique_couples_list:
@@ -107,9 +181,11 @@ def mobj_pipeline(csv_path, accuracy_metrics, beyond_accuracy, save=False):
                 stats_results = automated_mobj_report(
                     df_final,
                     plot_dir=plot_dir,
+                    kiwiat_plot_dir=kiwiat_plot_dir,
                     acc_metric=accuracy,
                     beyond_metrics=beyond_pair,
                     save=save,
+                    cutoff_for_radar=10
                 )
     else:
         print(f"File not found: {csv_path}")
