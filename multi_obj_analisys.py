@@ -16,18 +16,18 @@ accuracy_metrics = [
     "nDCGRendle2020",
     "Recall",
     "HR",
-    # "Precision",
+    "Precision",
     # "MAP",
-    # "MRR",
+    "MRR",
 ]
 beyond_accuracy = [
     "ItemCoverage",
     # "UserCoverage",
     # "ACLT",
-    # "Gini",
-    # "SEntropy",
+    "Gini",
+    "SEntropy",
     "EFD",
-    # "EPC",
+    "EPC",
     "PopREO",
     # "PopRSP",
 ]

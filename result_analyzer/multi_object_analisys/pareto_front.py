@@ -20,6 +20,21 @@ def identify_pareto(df, x_col, y_col):
     """Returns a boolean array of points on the Pareto frontier (maximizing both)."""
     data = df[[x_col, y_col]].values
     is_efficient = np.ones(data.shape[0], dtype=bool)
+
+    # List of bias metrics (Lower is better)
+    bias_metrics = ['popreo', 'poprsp', 'arp', 'aclt', 'aplt']
+
+    # Check if the metrics are bias metrics
+    max_x = x_col.lower() not in bias_metrics
+    max_y = y_col.lower() not in bias_metrics
+
+    # If any one of the metric is a bias, metrics, the values are inverted in sign
+    if not max_x:
+        data[:, 0] = -data[:, 0]
+    if not max_y:
+        data[:, 1] = -data[:, 1]
+
+
     for i, c in enumerate(data):
         if is_efficient[i]:
             is_efficient[is_efficient] = np.any(data[is_efficient] >= c, axis=1)
@@ -135,7 +150,7 @@ def automated_mobj_report(
     if len(all_data_for_radar) == 2:
         create_spider_plot(
             data=all_data_for_radar,
-            models_by_plot=all_labels_for_radar,
+            models=all_labels_for_radar,
             metrics=metrics_labels,
             titles=radar_titles,
             num_plots=len(all_data_for_radar)

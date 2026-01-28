@@ -52,9 +52,9 @@ def prepare_radar_data(df, acc_metric, beyond_metrics):
         norm_values = (raw_values - min_v) / range_v
 
         # B. Inversione metriche di Bias (Lower is Better -> Higher is Better)
-        # Se la metrica è di disparità (es. Gini), la invertiamo (1 - x)
+        # Se la metrica è di disparità la invertiamo (1 - x)
         # così che un punto esterno sul radar significhi sempre "Performance Migliore"
-        bias_keywords = ['popreo', 'gini', 'reo', 'rsp', 'epc', 'bias']
+        bias_keywords = ['popreo', 'reo', 'rsp', 'bias']
         for i, m_name in enumerate(all_metrics):
             if any(bias in m_name.lower() for bias in bias_keywords):
                 norm_values[:, i] = 1 - norm_values[:, i]
@@ -70,41 +70,45 @@ def prepare_radar_data(df, acc_metric, beyond_metrics):
     return data_list, labels_list, all_metrics
 
 
-def create_spider_plot(data, models_by_plot, metrics, titles, num_plots=2):
+
+# Function to create a spider plot
+def create_spider_plot(data, models, metrics, titles, num_plots=2):
     num_vars = len(metrics)
+
+    # Compute angle for each axis
     angles = np.linspace(0, 2 * np.pi, num_vars, endpoint=False).tolist()
     angles += angles[:1]
 
-    # Creazione figura a due colonne
-    fig, axs = plt.subplots(1, num_plots, figsize=(14, 8), subplot_kw=dict(polar=True))
+    # Initialize plot
+    fig, axs = plt.subplots(1, num_plots, figsize=(8, 5), subplot_kw=dict(polar=True))
 
     for i, ax in enumerate(axs):
         ax.set_theta_offset(np.pi / 2)
         ax.set_theta_direction(-1)
 
-        # Configurazione assi e griglia
+        # Draw one axe per variable and add labels
         ax.set_xticks(angles[:-1])
         ax.set_xticklabels(metrics, color='black', size=11)
+
+        # Remove y-ticks
         ax.set_yticklabels([])
+
+        # Remove the outermost circle
         ax.spines['polar'].set_visible(False)
 
-        # Sfondo circolare neutro
-        ax.fill(np.linspace(0, 2 * np.pi, 100), np.ones(100), color='lightgrey', alpha=0.2)
+        # Draw background
+        ax.fill(np.linspace(0, 2 * np.pi, 100), np.ones(100), color='lightgrey', alpha=0.5)
 
-        # Plot dei dati per il modello i-esimo
+        # Plot each model
         current_plot_data = data[i]
-        current_labels = models_by_plot[i]
-
+        current_labels = models[i]
         for j, model_data in enumerate(current_plot_data):
             values = model_data.tolist()
             values += values[:1]
 
-            # Disegna solo la linea (senza fill)
             line, = ax.plot(angles, values, linewidth=2, label=current_labels[j])
-
-            # Aggiunge i pallini (marker) su ogni vertice
-            # Usiamo lo stesso colore della linea appena creata
-            ax.scatter(angles[:-1], model_data, s=40, color=line.get_color(), zorder=3)
+            ax.fill(angles, values, color=line.get_color(), alpha=0.25)
+            ax.scatter(angles[:-1], model_data, s=20, color=line.get_color(), zorder=3)
 
         # Titolo posizionato in alto per non sovrapporsi
         ax.set_title(titles[i], fontsize=15, pad=50, y=1.1, fontweight='bold')
@@ -112,7 +116,16 @@ def create_spider_plot(data, models_by_plot, metrics, titles, num_plots=2):
         # Legenda posizionata sotto ogni singolo grafico
         ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.1), ncol=2, fontsize=9)
 
+    # Add a legend below the plot
+    handles, labels = plt.gca().get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))
+    # fig.legend(by_label.values(), by_label.keys(), loc='lower center', bbox_to_anchor=(0.5, -0.01), ncol=5, fontsize=12)
+    # fig.legend(loc='lower center', bbox_to_anchor=(0.5, -0.05), ncol=len(legend_labels), fontsize=8)
+
     plt.tight_layout()
-    # Spazio superiore per i titoli e inferiore per le legende
-    plt.subplots_adjust(top=0.80, bottom=0.15, wspace=0.3)
+    plt.subplots_adjust(bottom=0.2)
+
+
+    # Show the plot
+    # plt.show()
     return fig
