@@ -49,7 +49,6 @@ def automated_mobj_report(
     acc_metric="Recall",
     beyond_metrics=["ItemCoverage", "EPC"],
     save=True,
-    cutoff_for_radar=10
 ):
 
 
@@ -71,12 +70,25 @@ def automated_mobj_report(
     print("--- Statistical Trade-off Summary ---")
     print(stats_df)
 
+    # List of bias metrics (Lower is better)
+    bias_metrics = ['popreo', 'poprsp', 'arp', 'aclt', 'aplt']
+
     # 2. Visualization with Pareto Frontiers
     plt.figure(figsize=(14, 6))
     for i, b_metric in enumerate(beyond_metrics, 1):
+        # Check if the metrics are bias metrics
+        x_dir = "(Higher is better)" if acc_metric.lower() not in bias_metrics else "(Lower is better)"
+        y_dir = "(Higher is better)" if b_metric.lower() not in bias_metrics else "(Lower is better)"
         plt.subplot(1, len(beyond_metrics), i)
-        sns.scatterplot(
-            data=df, x=acc_metric, y=b_metric, hue="Algorithm", style="Cutoff", s=100
+
+        ax = sns.scatterplot(
+            data=df, x=acc_metric, y=b_metric, hue="Algorithm", s=100
+        )
+
+        # Set axis label
+        ax.set(
+            xlabel=f"{acc_metric} {x_dir}",
+            ylabel=f"{b_metric} {y_dir}"
         )
 
         for idx, row in df.iterrows():
@@ -124,7 +136,7 @@ def automated_mobj_report(
     plt.close()  # Clean up memory
 
     # 3. Integrazione Radar Chart (Kiwiat Plot)
-    df_radar_input = df[df["Cutoff"] == cutoff_for_radar].copy()
+    # df_radar_input = df[df["Cutoff"] == cutoff_for_radar].copy()
     unique_algos = df["Algorithm"].unique()[:2]  # Prende i primi due (es. ItemkNN e UserkNN)
 
     all_data_for_radar = []
@@ -133,7 +145,7 @@ def automated_mobj_report(
 
     for algo in unique_algos:
         # Filtriamo per algoritmo e cutoff fisso
-        df_algo = df[(df["Algorithm"] == algo) & (df["Cutoff"] == cutoff_for_radar)].copy()
+        df_algo = df[(df["Algorithm"] == algo)].copy()
 
         if not df_algo.empty:
             # Prepariamo i dati (normalizzazione e inversione)
@@ -214,7 +226,6 @@ def mobj_pipeline(csv_path, accuracy_metrics, beyond_accuracy, save=False):
                     acc_metric=accuracy,
                     beyond_metrics=beyond_pair,
                     save=save,
-                    cutoff_for_radar=10
                 )
     else:
         print(f"File not found: {csv_path}")

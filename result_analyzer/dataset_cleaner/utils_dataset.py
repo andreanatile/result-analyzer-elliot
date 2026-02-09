@@ -19,17 +19,17 @@ def create_integrated_dataset(folder_path, output_filename="final_knn_analysis.c
     base_dir = Path(folder_path)
 
     # 2. Identify relevant KNN files using glob
-    all_files = list(base_dir.glob("rec_*KNN_cutoff_*_relthreshold_1_*.tsv"))
+    all_files = list(base_dir.glob("rec_*_cutoff_*_relthreshold_*.tsv"))
 
     all_dataframes = []
 
     for file_path in all_files:
         # 3. Extract metadata from the filename
-        match = re.search(r"rec_(ItemKNN|UserKNN)_cutoff_(\d+)", file_path.name)
+        match = re.search(r"rec_ItemFairANN_cutoff_(\d+)", file_path.name)
 
         if match:
             model_type_from_file = match.group(1)
-            cutoff_val = int(match.group(2))
+            # cutoff_val = int(match.group(2))
 
             # 4. Read the TSV
             df = pd.read_csv(file_path, sep="\t")
@@ -40,7 +40,7 @@ def create_integrated_dataset(folder_path, output_filename="final_knn_analysis.c
 
             # 6. Add context metadata
             df_clean["Filename_Model"] = model_type_from_file
-            df_clean["Cutoff"] = cutoff_val
+            # df_clean["Cutoff"] = cutoff_val
 
             all_dataframes.append(df_clean)
 
