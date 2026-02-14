@@ -6,7 +6,7 @@ __pycache__/
 .antigravity
 # C extensions
 *.so
-
+results/
 # Distribution / packaging
 .Python
 build/
