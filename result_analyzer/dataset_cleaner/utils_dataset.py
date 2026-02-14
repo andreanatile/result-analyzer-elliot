@@ -17,7 +17,7 @@ def parse_model_string(model_str):
 def create_integrated_dataset(folder_path, output_filename="final_knn_analysis.csv"):
     # 1. Initialize Path object
     base_dir = Path(folder_path)
-
+    output_path = Path(output_filename)
     # 2. Identify relevant KNN files using glob
     all_files = list(base_dir.glob("rec_*_cutoff_*_relthreshold_*.tsv"))
 
@@ -25,7 +25,8 @@ def create_integrated_dataset(folder_path, output_filename="final_knn_analysis.c
 
     for file_path in all_files:
         # 3. Extract metadata from the filename
-        match = re.search(r"rec_ItemFairANN_cutoff_(\d+)", file_path.name)
+        # 3. Extract metadata from the filename
+        match = re.search(r"rec_(.+)_cutoff_(\d+)", file_path.name)
 
         if match:
             model_type_from_file = match.group(1)
@@ -49,7 +50,7 @@ def create_integrated_dataset(folder_path, output_filename="final_knn_analysis.c
         final_df = pd.concat(all_dataframes, ignore_index=True)
 
         # We join the base_dir with the output_filename
-        output_path = base_dir / output_filename
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         final_df.to_csv(output_path, index=False)
 
         print(f"Successfully integrated {len(all_dataframes)} files.")
