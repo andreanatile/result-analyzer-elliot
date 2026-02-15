@@ -144,12 +144,32 @@ def add_cr_column(target_csv_path, verification_csv_path, output_path=None):
 
     # 3. Handle Data Types
     for col in common_cols:
-        df_target[col] = pd.to_numeric(df_target[col], errors='ignore')
-        df_verif_ready[col] = pd.to_numeric(df_verif_ready[col], errors='ignore')
-        
-        if df_target[col].dtype == object or df_verif_ready[col].dtype == object:
-             df_target[col] = df_target[col].astype(str)
-             df_verif_ready[col] = df_verif_ready[col].astype(str)
+        # 3. Handle Data Types (Updated to fix warnings and merge bugs)
+        for col in common_cols:
+            # 1. Clean up hidden spaces in strings (fixes "UserFairANN " vs "UserFairANN")
+            if df_target[col].dtype == object:
+                df_target[col] = df_target[col].str.strip()
+            if df_verif_ready[col].dtype == object:
+                df_verif_ready[col] = df_verif_ready[col].str.strip()
+
+            # 2. Try converting to numeric, catching errors explicitly instead of using errors='ignore'
+            try:
+                df_target[col] = pd.to_numeric(df_target[col]).astype(float)
+            except (ValueError, TypeError):
+                df_target[col] = df_target[col].astype(str)
+
+            try:
+                df_verif_ready[col] = pd.to_numeric(df_verif_ready[col]).astype(float)
+            except (ValueError, TypeError):
+                df_verif_ready[col] = df_verif_ready[col].astype(str)
+
+            # 3. Fill NaNs with dummy values so pandas can successfully match empty cells
+            if df_target[col].dtype == float:
+                df_target[col] = df_target[col].fillna(-999999.0)
+                df_verif_ready[col] = df_verif_ready[col].fillna(-999999.0)
+            else:
+                df_target[col] = df_target[col].replace(['nan', 'NaN', 'None'], 'MISSING').fillna('MISSING')
+                df_verif_ready[col] = df_verif_ready[col].replace(['nan', 'NaN', 'None'], 'MISSING').fillna('MISSING')
              
     # 4. Merge
     print(f"Merging on columns: {common_cols}")
