@@ -1,8 +1,10 @@
 from result_analyzer.dataset_cleaner.utils_dataset import create_integrated_dataset, add_cr_column
 
-path="results/target_t_0_05/performance"
-target_file = "data/target_t_0_05.csv"
-verification_file = "results/target_t_0_05/performance/CR_verification.csv"
+target_t_path = 'target_t_0_05_minh'
+
+path = f"results/{target_t_path}/performance"
+target_file = f"data/{target_t_path}.csv"
+verification_file = f"results/{target_t_path}/performance/CR_verification.csv"
 
 # 1. Create dataset
 print("Creating dataset...")
