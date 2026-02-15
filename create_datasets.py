@@ -1,6 +1,6 @@
 from result_analyzer.dataset_cleaner.utils_dataset import create_integrated_dataset, add_cr_column
 
-target_t_path = 'target_t_0_05_minh'
+target_t_path = 'target_t_0_95_minh'
 
 path = f"results/{target_t_path}/performance"
 target_file = f"data/{target_t_path}.csv"

@@ -7,7 +7,7 @@ import math
 # ==============================================================================
 
 # Number of items (if ItemKNN) or Users (if UserKNN) in your dataset
-DATASET_SIZE = 1348
+DATASET_SIZE = 942
 
 # The "Approximation Severity" thresholds you want to test.
 TARGET_THRESHOLDS = [0.05, 0.25, 0.5, 0.75, 0.95]
@@ -196,6 +196,6 @@ else:
     print(df.to_string(index=False))
 
     # Export
-    filename = "item_hyperparameters.csv"
+    filename = "user_hyperparameters.csv"
     df.to_csv(filename, index=False)
     print(f"\nSaved to {filename}")
