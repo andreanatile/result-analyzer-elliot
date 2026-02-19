@@ -15,16 +15,17 @@ def load_data(data_dir, metric, neighbors):
     
     # Iterate over files in the directory
     for filename in os.listdir(data_dir):
-        if filename.startswith("target_t_") and filename.endswith(".csv") and "_minh" not in filename:
+        if filename.startswith("target_t_") and filename.endswith(".csv"):
             # Extract t from filename
             try:
-                t_str = filename.replace("target_t_", "").replace(".csv", "")
+                t_str = filename.replace("target_t_", "").replace(".csv", "").replace("_minh", "")
                 t = float(t_str.replace("_", "."))
             except ValueError:
                 print(f"Skipping file with unexpected name format: {filename}")
                 continue
             
             filepath = os.path.join(data_dir, filename)
+            is_minh_file = "_minh" in filename
             try:
                 df = pd.read_csv(filepath)
                 
@@ -47,6 +48,14 @@ def load_data(data_dir, metric, neighbors):
                         algo_str = str(algo)
                         sim_str = str(sim).lower()
                         
+                        # Filtering Logic:
+                        # If NOT a _minh file, but we see User/ItemFairANN + no_sampling + jaccard, SKIP IT.
+                        # The user wants "Minhashing" data strictly from _minh files.
+                        if not is_minh_file:
+                             if 'FairANN' in algo_str and (strat == '' or strat.lower() == 'no_sampling') and sim_str == 'jaccard':
+                                 continue
+
+                        # Custom naming for FairANN families when no strategy is present or is 'no_sampling'
                         if 'FairANN' in algo_str and (strat == '' or strat.lower() == 'no_sampling'):
                             prefix = 'User' if algo_str.startswith('User') else 'Item'
                             if sim_str == 'jaccard':
@@ -153,10 +162,6 @@ def plot_metric_split_by_user_item(data_dir, metric, neighbors, output_prefix=No
 def plot_metric_split_by_sim(data_dir, metric, neighbors, output_prefix=None):
     model_data = load_data(data_dir, metric, neighbors)
     
-    # helper to check if algo is Annoy
-    def is_annoy(algo_name):
-        return 'ANNOY' in algo_name.upper()
-
     # Split into 4 groups
     user_cosine = {}
     user_jaccard = {}
@@ -168,27 +173,22 @@ def plot_metric_split_by_sim(data_dir, metric, neighbors, output_prefix=None):
         sim = data['sim'].lower()
         algo = data['algo']
         
-        # Annoy goes to both Cosine and Jaccard lists
-        # Others go to their respective list based on sim
+        # Determine target list based on similarity
+        # Map 'angular' to cosine list (standard approximation)
+        tgt_sim = 'cosine' if sim == 'angular' else sim
         
         if m_type == 'User':
-            if sim == 'cosine':
+            if tgt_sim == 'cosine':
                 user_cosine[label] = data
-            elif sim == 'jaccard':
-                user_jaccard[label] = data
-            elif is_annoy(algo) or sim == 'angular':
-                user_cosine[label] = data
+            elif tgt_sim == 'jaccard':
                 user_jaccard[label] = data
                 
         elif m_type == 'Item':
-            if sim == 'cosine':
+            if tgt_sim == 'cosine':
                 item_cosine[label] = data
-            elif sim == 'jaccard':
+            elif tgt_sim == 'jaccard':
                 item_jaccard[label] = data
-            elif is_annoy(algo) or sim == 'angular':
-                item_cosine[label] = data
-                item_jaccard[label] = data
-
+                 
     if output_prefix:
         p_user_cos = f"{output_prefix}_User_Cosine.png"
         p_user_jac = f"{output_prefix}_User_Jaccard.png"
@@ -197,16 +197,16 @@ def plot_metric_split_by_sim(data_dir, metric, neighbors, output_prefix=None):
     else:
         p_user_cos = p_user_jac = p_item_cos = p_item_jac = None
 
-    print("Plotting User Models (Cosine + Annoy)...")
+    print("Plotting User Models (Cosine)...")
     plot_data(user_cosine, metric, neighbors, title_suffix="(User - Cosine)", output_file=p_user_cos)
     
-    print("Plotting User Models (Jaccard + Annoy)...")
+    print("Plotting User Models (Jaccard)...")
     plot_data(user_jaccard, metric, neighbors, title_suffix="(User - Jaccard)", output_file=p_user_jac)
     
-    print("Plotting Item Models (Cosine + Annoy)...")
+    print("Plotting Item Models (Cosine)...")
     plot_data(item_cosine, metric, neighbors, title_suffix="(Item - Cosine)", output_file=p_item_cos)
     
-    print("Plotting Item Models (Jaccard + Annoy)...")
+    print("Plotting Item Models (Jaccard)...")
     plot_data(item_jaccard, metric, neighbors, title_suffix="(Item - Jaccard)", output_file=p_item_jac)
 
 if __name__ == "__main__":
