@@ -43,11 +43,11 @@ def load_data(data_dir, metric, neighbors):
                         sim = row.get('sim', 'Unknown')
                         strat = str(row.get('strat', '')).strip() if pd.notna(row.get('strat')) else ''
                         
-                        # Custom naming for FairANN families when no strategy is present
+                        # Custom naming for FairANN families when no strategy is present or is 'no_sampling'
                         algo_str = str(algo)
                         sim_str = str(sim).lower()
                         
-                        if 'FairANN' in algo_str and strat == '':
+                        if 'FairANN' in algo_str and (strat == '' or strat.lower() == 'no_sampling'):
                             prefix = 'User' if algo_str.startswith('User') else 'Item'
                             if sim_str == 'jaccard':
                                 label = f"{prefix}Minhashing"
