@@ -24,6 +24,18 @@ class ParetoPlotter3D:
 
         self.df = pd.concat(df_list, ignore_index=True)
         
+        # Differentiate based on sampling strategy if 'strat' column exists
+        if 'strat' in self.df.columns:
+            def update_algo_name(row):
+                algo = str(row['Algorithm'])
+                strat = row.get('strat')
+                # Check if strat is valid (not NaN and not empty)
+                if pd.notna(strat) and str(strat).strip() != '':
+                     return f"{algo}_{strat}"
+                return algo
+            
+            self.df['Algorithm'] = self.df.apply(update_algo_name, axis=1)
+        
         # Add Type column based on Algorithm name
         # Assuming User models start with 'User' and Item models with 'Item'
         def get_type(algo):
@@ -156,3 +168,79 @@ class ParetoPlotter3D:
                 print(f"Saved {model_type} plot to {filename}")
             else:
                 fig.show()
+
+    def calculate_hypervolume(self, metrics, directions=None, output_file=None):
+        """
+        Calculates the Hypervolume for each point on the Pareto frontier relative to a reference point.
+        The reference point is determined by the worst values in the entire dataset for each metric.
+        Saves the results to a CSV file if output_file is provided.
+        """
+        if self.df is None:
+            self.load_data()
+            
+        if directions is None:
+            directions = ['max', 'max', 'max']
+            
+        if len(metrics) != 3 or len(directions) != 3:
+             raise ValueError("Metrics and directions must have length 3.")
+
+        # Calculate Reference Point (Worst Case)
+        ref_point = []
+        for i, metric in enumerate(metrics):
+            if directions[i] == 'max':
+                # Worst case for maximization is min value
+                # Add a small epsilon or just use strict min? Usually ref point should be slightly worse than worst point to have volume
+                # But per user definition: HV = volume of hypercube bounded by point and ref point.
+                # If point == ref point, volume is 0.
+                valid_values = self.df[metric].dropna()
+                if valid_values.empty:
+                     ref_point.append(0) 
+                else:
+                    worst_val = valid_values.min()
+                    # Determine if we need an offset. Usually yes.
+                    # If all values are positive, 0 might be a natural ref point.
+                    # If values can be negative, min value is safer.
+                    # Let's use the min value. The "worst" point in the dataset will have 0 volume in that dimension.
+                    ref_point.append(worst_val)
+            else: # min
+                valid_values = self.df[metric].dropna()
+                if valid_values.empty:
+                    ref_point.append(0)
+                else:
+                    worst_val = valid_values.max()
+                    ref_point.append(worst_val)
+        
+        print(f"Reference Point for Hypervolume: {dict(zip(metrics, ref_point))}")
+
+        results = []
+        
+        types = ['User', 'Item']
+        for model_type in types:
+            type_df = self.df[self.df['Type'] == model_type]
+            if type_df.empty: continue
+            
+            for algo, algo_df in type_df.groupby('Algorithm'):
+                pareto_df = self._get_pareto_frontier(algo_df, metrics, directions)
+                
+                for index, row in pareto_df.iterrows():
+                    # Calculate volume of hypercube
+                    # Volume = product(|point_k - ref_k|)
+                    volume = 1.0
+                    point_values = row[metrics].values
+                    
+                    for k in range(3):
+                        diff = abs(point_values[k] - ref_point[k])
+                        volume *= diff
+                    
+                    result_row = row.to_dict()
+                    result_row['Hypervolume'] = volume
+                    # Include ref point info?
+                    results.append(result_row)
+        
+        results_df = pd.DataFrame(results)
+        
+        if output_file:
+            results_df.to_csv(output_file, index=False)
+            print(f"Saved Hypervolume results to {output_file}")
+            
+        return results_df

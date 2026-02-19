@@ -60,6 +60,9 @@ if __name__ == "__main__":
     parser.add_argument("--output_file", type=str, default=DEFAULT_OUTPUT_FILE, 
                         help=f"Output HTML file name (default: {DEFAULT_OUTPUT_FILE})")
 
+    parser.add_argument("--compute_hypervolume", action="store_true", 
+                        help="Compute and save Hypervolume metrics for the Pareto frontier")
+
     args = parser.parse_args()
 
     print(f"Starting 3D Pareto Plotting...")
@@ -71,6 +74,12 @@ if __name__ == "__main__":
         plotter = ParetoPlotter3D(args.data_folder)
         plotter.load_data()
         plotter.plot_pareto_3d(args.metrics, directions=args.directions, output_file=args.output_file)
+        
+        if args.compute_hypervolume:
+            print("Calculating Hypervolume...")
+            hv_output_file = "hypervolume_results.csv"
+            plotter.calculate_hypervolume(args.metrics, directions=args.directions, output_file=hv_output_file)
+
         print("Finished 3D Pareto Plotting.")
     except Exception as e:
         print(f"An error occurred: {e}")
