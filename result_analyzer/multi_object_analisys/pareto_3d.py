@@ -1,6 +1,8 @@
 import pandas as pd
+import numpy as np
 import plotly.graph_objects as go
 from pathlib import Path
+from pymoo.indicators.hv import HV
 import os
 
 class ParetoPlotter3D:
@@ -169,78 +171,122 @@ class ParetoPlotter3D:
             else:
                 fig.show()
 
+    import pandas as pd
+    import numpy as np
+    from pymoo.indicators.hv import HV
+
     def calculate_hypervolume(self, metrics, directions=None, output_file=None):
         """
-        Calculates the Hypervolume for each point on the Pareto frontier relative to a reference point.
-        The reference point is determined by the worst values in the entire dataset for each metric.
-        Saves the results to a CSV file if output_file is provided.
+        Calculates the true Hypervolume indicator for the Pareto frontier of each algorithm.
+        Uses the 'pymoo' library to compute the union volume of the non-dominated points.
         """
         if self.df is None:
             self.load_data()
-            
+
         if directions is None:
             directions = ['max', 'max', 'max']
-            
-        if len(metrics) != 3 or len(directions) != 3:
-             raise ValueError("Metrics and directions must have length 3.")
 
-        # Calculate Reference Point (Worst Case)
+        if len(metrics) != 3 or len(directions) != 3:
+            raise ValueError("Metrics and directions must have length 3.")
+
+        # 1. Calculate Reference Point (Worst Case + Offset)
         ref_point = []
         for i, metric in enumerate(metrics):
+            valid_values = self.df[metric].dropna()
+            if valid_values.empty:
+                ref_point.append(0.0)
+                continue
+
             if directions[i] == 'max':
-                # Worst case for maximization is min value
-                # Add a small epsilon or just use strict min? Usually ref point should be slightly worse than worst point to have volume
-                # But per user definition: HV = volume of hypercube bounded by point and ref point.
-                # If point == ref point, volume is 0.
-                valid_values = self.df[metric].dropna()
-                if valid_values.empty:
-                     ref_point.append(0) 
-                else:
-                    worst_val = valid_values.min()
-                    # Determine if we need an offset. Usually yes.
-                    # If all values are positive, 0 might be a natural ref point.
-                    # If values can be negative, min value is safer.
-                    # Let's use the min value. The "worst" point in the dataset will have 0 volume in that dimension.
-                    ref_point.append(worst_val)
-            else: # min
-                valid_values = self.df[metric].dropna()
-                if valid_values.empty:
-                    ref_point.append(0)
-                else:
-                    worst_val = valid_values.max()
-                    ref_point.append(worst_val)
-        
-        print(f"Reference Point for Hypervolume: {dict(zip(metrics, ref_point))}")
+                # Worst case for maximization is the minimum value.
+                # We want the reference point to be slightly WORSE (smaller) than the minimum.
+                # worst_val = valid_values.min()
+                # if worst_val > 0:
+                #     ref_point.append(worst_val * 0.99)
+                # elif worst_val < 0:
+                #     ref_point.append(worst_val * 1.01)
+                # else:
+                #     ref_point.append(-0.01)  # If exactly 0
+                ref_point.append(-0.01)
+            else:
+                # Worst case for minimization is the maximum value.
+                # We want the reference point to be slightly WORSE (larger) than the maximum.
+                # worst_val = valid_values.max()
+                # if worst_val > 0:
+                #     ref_point.append(worst_val * 1.01)
+                # elif worst_val < 0:
+                #     ref_point.append(worst_val * 0.99)
+                # else:
+                #     ref_point.append(0.01)  # If exactly 0
+                ref_point.append(1.01)
+
+
+        print(f"Reference Point for Hypervolume (Original Scale): {dict(zip(metrics, ref_point))}")
+
+        # Prepare reference point for Pymoo (which assumes strict minimization)
+        # So 'max' metrics must be inverted (multiplied by -1)
+        pymoo_ref = []
+        for i in range(len(metrics)):
+            if directions[i] == 'max':
+                pymoo_ref.append(-ref_point[i])
+            else:
+                pymoo_ref.append(ref_point[i])
+
+        ref_array = np.array(pymoo_ref)
+
+        # Initialize the Hypervolume indicator with our reference point
+        hv_indicator = HV(ref_point=ref_array)
 
         results = []
-        
-        types = ['User', 'Item']
+        types = ['User', 'Item']  # Adjust if your 'Type' column contains other categories
+
         for model_type in types:
             type_df = self.df[self.df['Type'] == model_type]
-            if type_df.empty: continue
-            
+            if type_df.empty:
+                continue
+
             for algo, algo_df in type_df.groupby('Algorithm'):
+                # Get the Pareto front points for this specific algorithm
                 pareto_df = self._get_pareto_frontier(algo_df, metrics, directions)
-                
-                for index, row in pareto_df.iterrows():
-                    # Calculate volume of hypercube
-                    # Volume = product(|point_k - ref_k|)
-                    volume = 1.0
-                    point_values = row[metrics].values
-                    
-                    for k in range(3):
-                        diff = abs(point_values[k] - ref_point[k])
-                        volume *= diff
-                    
-                    result_row = row.to_dict()
-                    result_row['Hypervolume'] = volume
-                    # Include ref point info?
-                    results.append(result_row)
-        
+
+                if pareto_df.empty:
+                    continue
+
+                # 2. Extract points and prepare them for Pymoo
+                front_points = []
+                for _, row in pareto_df.iterrows():
+                    point = []
+                    for i, metric in enumerate(metrics):
+                        val = row[metric]
+                        if directions[i] == 'max':
+                            point.append(-val)  # Invert for minimization
+                        else:
+                            point.append(val)
+                    front_points.append(point)
+
+                front_array = np.array(front_points)
+
+                # 3. Calculate the Total Hypervolume of the front
+                try:
+                    # ind(front_array) calculates the volume of the union of all dominated hypercubes
+                    total_hv = hv_indicator(front_array)
+                except Exception as e:
+                    print(f"Could not compute HV for {algo}: {e}")
+                    total_hv = 0.0
+
+                # Store exactly ONE result per algorithm
+                results.append({
+                    'Type': model_type,
+                    'Algorithm': algo,
+                    'Hypervolume': total_hv,
+                    'Points_in_Frontier': len(pareto_df),
+                    'Total_Points': len(algo_df)  # <--- NEW COLUMN ADDED HERE
+                })
+
         results_df = pd.DataFrame(results)
-        
+
         if output_file:
             results_df.to_csv(output_file, index=False)
             print(f"Saved Hypervolume results to {output_file}")
-            
+
         return results_df
