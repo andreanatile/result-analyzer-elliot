@@ -37,7 +37,7 @@ beyond_accuracy = [
 
 # ----------------- 3D Pareto Plotting Configuration -----------------
 # You can modify these values to run the script directly with your preferred settings
-DEFAULT_DATA_FOLDER = "/home/girobat/Projects/result-analyzer-elliot/data"
+DEFAULT_DATA_FOLDER = "./data"
 DEFAULT_METRICS = ["nDCGRendle2020", "Recall", "Gini"]
 DEFAULT_DIRECTIONS = ["max", "max", "min"] # 'max' or 'min'
 DEFAULT_OUTPUT_FILE = "pareto_3d.html"
@@ -46,15 +46,16 @@ DEFAULT_OUTPUT_FILE = "pareto_3d.html"
 import argparse
 
 if __name__ == "__main__":
+    n_metrics = 3
     parser = argparse.ArgumentParser(description="3D Pareto Frontier Plotting")
-    
+
     parser.add_argument("--data_folder", type=str, default=DEFAULT_DATA_FOLDER, 
                         help=f"Path to the data folder (default: {DEFAULT_DATA_FOLDER})")
     
-    parser.add_argument("--metrics", nargs=3, default=DEFAULT_METRICS, 
+    parser.add_argument("--metrics", nargs=n_metrics, default=DEFAULT_METRICS,
                         help=f"List of 3 metrics to plot (default: {DEFAULT_METRICS})")
     
-    parser.add_argument("--directions", nargs=3, choices=['max', 'min'], default=DEFAULT_DIRECTIONS,
+    parser.add_argument("--directions", nargs=n_metrics, choices=['max', 'min'], default=DEFAULT_DIRECTIONS,
                         help=f"Optimization direction for each metric (default: {DEFAULT_DIRECTIONS})")
     
     parser.add_argument("--output_file", type=str, default=DEFAULT_OUTPUT_FILE, 

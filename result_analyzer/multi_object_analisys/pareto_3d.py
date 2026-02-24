@@ -186,8 +186,8 @@ class ParetoPlotter3D:
         if directions is None:
             directions = ['max', 'max', 'max']
 
-        if len(metrics) != 3 or len(directions) != 3:
-            raise ValueError("Metrics and directions must have length 3.")
+        # if len(metrics) != 3 or len(directions) != 3:
+        #     raise ValueError("Metrics and directions must have length 3.")
 
         # 1. Calculate Reference Point (Worst Case + Offset)
         ref_point = []
@@ -240,50 +240,76 @@ class ParetoPlotter3D:
         results = []
         types = ['User', 'Item']  # Adjust if your 'Type' column contains other categories
 
+        # Define how we group the data. Check if 'similarity' exists in your dataframe.
+        # If your column is named differently (e.g., 'sim'), change it here!
+        if 'sim' in self.df.columns:
+            groupby_cols = ['Algorithm', 'sim']
+        else:
+            print("Warning: 'similarity' column not found. Grouping only by Algorithm.")
+            groupby_cols = ['Algorithm']
+
         for model_type in types:
             type_df = self.df[self.df['Type'] == model_type]
             if type_df.empty:
                 continue
 
-            for algo, algo_df in type_df.groupby('Algorithm'):
-                # Get the Pareto front points for this specific algorithm
+            # Group by multiple columns. dropna=False ensures algorithms WITHOUT
+            # a similarity metric (like random baselines) are not deleted.
+            for group_keys, algo_df in type_df.groupby(groupby_cols, dropna=False):
+
+                # Extract the names cleanly based on how many columns we grouped by
+                if isinstance(group_keys, tuple):
+                    algo = group_keys[0]
+                    sim = group_keys[1]
+                    # Create a combined display name (e.g., "ItemKNN (cosine)")
+                    display_name = f"{algo} ({sim})" if pd.notna(sim) else algo
+                else:
+                    algo = group_keys
+                    sim = None
+                    display_name = algo
+
+                # Get the Pareto front points for this specific Algorithm+Similarity combo
                 pareto_df = self._get_pareto_frontier(algo_df, metrics, directions)
 
                 if pareto_df.empty:
                     continue
 
-                # 2. Extract points and prepare them for Pymoo
+                # Extract points for Pymoo
                 front_points = []
                 for _, row in pareto_df.iterrows():
                     point = []
                     for i, metric in enumerate(metrics):
                         val = row[metric]
                         if directions[i] == 'max':
-                            point.append(-val)  # Invert for minimization
+                            point.append(-val)
                         else:
                             point.append(val)
                     front_points.append(point)
 
                 front_array = np.array(front_points)
 
-                # 3. Calculate the Total Hypervolume of the front
+                # Calculate Total Hypervolume
                 try:
-                    # ind(front_array) calculates the volume of the union of all dominated hypercubes
                     total_hv = hv_indicator(front_array)
                 except Exception as e:
-                    print(f"Could not compute HV for {algo}: {e}")
+                    print(f"Could not compute HV for {display_name}: {e}")
                     total_hv = 0.0
 
-                # Store exactly ONE result per algorithm
+                # Store the expanded results
                 results.append({
                     'Type': model_type,
                     'Algorithm': algo,
+                    'Similarity': sim,  # The isolated similarity metric
+                    'Algorithm_Variant': display_name,  # The combined string for easy plotting
                     'Hypervolume': total_hv,
                     'Points_in_Frontier': len(pareto_df),
-                    'Total_Points': len(algo_df)  # <--- NEW COLUMN ADDED HERE
+                    'Total_Points': len(algo_df)
                 })
 
         results_df = pd.DataFrame(results)
+
+        # Sort the dataframe so the highest hypervolumes are at the top
+        results_df = results_df.sort_values(by=['Type', 'Hypervolume'], ascending=[True, False])
 
         if output_file:
             results_df.to_csv(output_file, index=False)
