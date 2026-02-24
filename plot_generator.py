@@ -39,6 +39,11 @@ def load_data(data_dir, metrics, neighbors):
                         algo = row.get('Algorithm', 'Unknown')
                         sim = row.get('sim', 'Unknown')
                         strat = str(row.get('strat', '')).strip() if pd.notna(row.get('strat')) else ''
+                        preposp = str(row.get('preposp', '')).strip() if pd.notna(row.get('preposp')) else ''
+                        
+                        if 'knnfairness' in str(algo).lower() and preposp:
+                            strat = preposp
+
                         algo_str = str(algo)
                         sim_str = str(sim).lower()
 
