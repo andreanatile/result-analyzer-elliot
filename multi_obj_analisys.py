@@ -46,6 +46,7 @@ DEFAULT_OUTPUT_FILE = "pareto_3d.html"
 import argparse
 
 if __name__ == "__main__":
+
     n_metrics = 3
     parser = argparse.ArgumentParser(description="3D Pareto Frontier Plotting")
 
