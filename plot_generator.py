@@ -86,16 +86,36 @@ def load_data(data_dir, metrics, neighbors):
 # PLOTTING FUNCTIONS
 # ==============================================================================
 
-def plot_2d(model_data, x_metric, y_metric, neighbors, title_suffix="", output_file=None):
+def get_base_label(label):
+    base = label
+    if base.startswith('User'): base = base[4:]
+    if base.startswith('Item'): base = base[4:]
+    base = base.replace(' - cosine', '').replace(' - jaccard', '').replace(' - angular', '')
+    return base
+
+def plot_2d(model_data, x_metric, y_metric, neighbors, all_labels=None, title_suffix="", output_file=None):
     if not model_data: return
     plt.figure(figsize=(12, 8))
-    markers = ['o', 's', '^', 'D', 'v', '<', '>', 'p', '*', 'h']
+    
+    if all_labels is None:
+        all_labels = list(model_data.keys())
+        
+    base_labels = sorted(set(get_base_label(l) for l in all_labels))
+    colors = plt.cm.tab10.colors
+    if len(base_labels) > 10:
+        colors = plt.cm.tab20.colors
+    markers = ['o', 's', '^', 'D', 'v', '<', '>', 'p', '*', 'h', 'X', 'P', 'd']
 
-    for i, (label, data) in enumerate(model_data.items()):
+    for label, data in model_data.items():
+        base = get_base_label(label)
+        idx = base_labels.index(base)
+        c = colors[idx % len(colors)]
+        m = markers[idx % len(markers)]
+        
         combined = sorted(zip(data[x_metric], data[y_metric]), key=lambda k: k[0])
         x_vals, y_vals = zip(*combined) if combined else ([], [])
-        plt.scatter(x_vals, y_vals, label=label, marker=markers[i % len(markers)], alpha=0.8, s=60)
-        plt.plot(x_vals, y_vals, alpha=0.4, linewidth=1.5)
+        plt.scatter(x_vals, y_vals, label=label, marker=m, color=c, alpha=0.8, s=60)
+        plt.plot(x_vals, y_vals, color=c, alpha=0.4, linewidth=1.5)
 
     plt.title(f'{x_metric} vs {y_metric} (nn={neighbors}) {title_suffix}')
     plt.xlabel(x_metric)
@@ -109,15 +129,31 @@ def plot_2d(model_data, x_metric, y_metric, neighbors, title_suffix="", output_f
     plt.close()
 
 
-def plot_3d(model_data, x_metric, y_metric, z_metric, neighbors, title_suffix="", output_file=None):
+def plot_3d(model_data, x_metric, y_metric, z_metric, neighbors, all_labels=None, title_suffix="", output_file=None):
     if not model_data: return
     fig = go.Figure()
+
+    if all_labels is None:
+        all_labels = list(model_data.keys())
+        
+    base_labels = sorted(set(get_base_label(l) for l in all_labels))
+    import plotly.colors as pcolors
+    colors = pcolors.qualitative.Plotly
+    if len(base_labels) > 10:
+        colors = pcolors.qualitative.Alphabet
+    markers = ['circle', 'square', 'diamond', 'cross', 'x', 'triangle-up', 'triangle-down', 'pentagon', 'hexagon', 'star']
+
     for label, data in model_data.items():
+        base = get_base_label(label)
+        idx = base_labels.index(base)
+        c = colors[idx % len(colors)]
+        m = markers[idx % len(markers)]
+        
         combined = sorted(zip(data[x_metric], data[y_metric], data[z_metric]), key=lambda k: k[0])
         x_v, y_v, z_v = zip(*combined) if combined else ([], [], [])
         fig.add_trace(go.Scatter3d(
             x=x_v, y=y_v, z=z_v, mode='lines+markers', name=label,
-            marker=dict(size=4), line=dict(width=4),
+            marker=dict(size=4, color=c, symbol=m), line=dict(width=4, color=c),
             text=[f"{label}<br>{x_metric}:{x:.3f}<br>{y_metric}:{y:.3f}<br>{z_metric}:{z:.3f}" for x, y, z in
                   zip(x_v, y_v, z_v)]
         ))
@@ -140,7 +176,6 @@ def run_automation(data_dir, metrics, split_sim, split_type):
     neighbor_values = [50, 100, 250]
     is_3d = (len(metrics) == 3)
 
-    # Nome cartella principale basato sulle metriche (Esempio: nDCG_vs_CR_vs_ApproxSeverity)
     if is_3d:
         main_folder = f"{metrics[0]}_vs_{metrics[1]}_vs_{metrics[2]}"
     else:
@@ -155,10 +190,9 @@ def run_automation(data_dir, metrics, split_sim, split_type):
         if not model_data:
             continue
 
-        # Percorso: plots / METRICHE / nn_X /
         base_out_dir = os.path.join("plots", main_folder, f"nn_{nn}")
+        all_labels = list(model_data.keys())
 
-        # Raggruppamento
         if split_sim:
             groups = {
                 "User_Cosine": {k: v for k, v in model_data.items() if
@@ -184,10 +218,10 @@ def run_automation(data_dir, metrics, split_sim, split_type):
             out_path = os.path.join(base_out_dir, f"{g_name}{ext}")
 
             if is_3d:
-                plot_3d(g_data, metrics[0], metrics[1], metrics[2], nn, title_suffix=f"({g_name})",
+                plot_3d(g_data, metrics[0], metrics[1], metrics[2], nn, all_labels=all_labels, title_suffix=f"({g_name})",
                         output_file=out_path)
             else:
-                plot_2d(g_data, metrics[0], metrics[1], nn, title_suffix=f"({g_name})", output_file=out_path)
+                plot_2d(g_data, metrics[0], metrics[1], nn, all_labels=all_labels, title_suffix=f"({g_name})", output_file=out_path)
 
 
 if __name__ == "__main__":
