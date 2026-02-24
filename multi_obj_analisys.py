@@ -74,6 +74,15 @@ if __name__ == "__main__":
     try:
         plotter = ParetoPlotter3D(args.data_folder)
         plotter.load_data()
+        
+        # Differentiate KNNFairness models by their 'preposp' method
+        if 'preposp' in plotter.df.columns:
+            mask = plotter.df['Algorithm'].str.contains('KNNfairness', case=False, na=False)
+            has_preposp = plotter.df['preposp'].notna() & (plotter.df['preposp'] != '')
+            plotter.df.loc[mask & has_preposp, 'Algorithm'] = plotter.df.loc[mask & has_preposp].apply(
+                lambda row: f"{row['Algorithm']}_{row['preposp']}", axis=1
+            )
+
         plotter.plot_pareto_3d(args.metrics, directions=args.directions, output_file=args.output_file)
         
         if args.compute_hypervolume:

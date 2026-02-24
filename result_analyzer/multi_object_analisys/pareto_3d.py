@@ -120,6 +120,19 @@ class ParetoPlotter3D:
         if self.df is None:
             self.load_data()
 
+        def get_base_algo(algo):
+            if str(algo).startswith('User'): return str(algo)[4:]
+            if str(algo).startswith('Item'): return str(algo)[4:]
+            return str(algo)
+            
+        base_algos = sorted(set(get_base_algo(a) for a in self.df['Algorithm']))
+        
+        import plotly.colors as pcolors
+        colors = pcolors.qualitative.Plotly
+        if len(base_algos) > 10:
+            colors = pcolors.qualitative.Alphabet
+        markers = ['circle', 'square', 'diamond', 'cross', 'x', 'triangle-up', 'triangle-down', 'pentagon', 'hexagon', 'star']
+
         types = ['User', 'Item']
         
         for model_type in types:
@@ -141,13 +154,19 @@ class ParetoPlotter3D:
                 ascending = (directions[0] == 'min')
                 pareto_df = pareto_df.sort_values(by=metrics[0], ascending=ascending)
 
+                base = get_base_algo(algo)
+                idx = base_algos.index(base)
+                c = colors[idx % len(colors)]
+                m = markers[idx % len(markers)]
+
                 fig.add_trace(go.Scatter3d(
                     x=pareto_df[metrics[0]],
                     y=pareto_df[metrics[1]],
                     z=pareto_df[metrics[2]],
                     mode='lines+markers',
                     name=algo,
-                    marker=dict(size=5),
+                    marker=dict(size=5, color=c, symbol=m),
+                    line=dict(color=c),
                     text=[f"{algo}<br>{metrics[0]}: {x:.4f}<br>{metrics[1]}: {y:.4f}<br>{metrics[2]}: {z:.4f}" 
                           for x, y, z in zip(pareto_df[metrics[0]], pareto_df[metrics[1]], pareto_df[metrics[2]])]
                 ))

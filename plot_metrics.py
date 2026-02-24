@@ -43,7 +43,11 @@ def load_data(data_dir, metric, neighbors):
                         algo = row.get('Algorithm', 'Unknown')
                         sim = row.get('sim', 'Unknown')
                         strat = str(row.get('strat', '')).strip() if pd.notna(row.get('strat')) else ''
+                        preposp = str(row.get('preposp', '')).strip() if pd.notna(row.get('preposp')) else ''
                         
+                        if 'knnfairness' in str(algo).lower() and preposp:
+                            strat = preposp
+                            
                         # Custom naming for FairANN families when no strategy is present or is 'no_sampling'
                         algo_str = str(algo)
                         sim_str = str(sim).lower()
@@ -96,7 +100,14 @@ def load_data(data_dir, metric, neighbors):
                 
     return model_data
 
-def plot_data(model_data, metric, neighbors, title_suffix="", output_file=None):
+def get_base_label(label):
+    base = label
+    if base.startswith('User'): base = base[4:]
+    if base.startswith('Item'): base = base[4:]
+    base = base.replace(' - cosine', '').replace(' - jaccard', '').replace(' - angular', '')
+    return base
+
+def plot_data(model_data, metric, neighbors, all_labels=None, title_suffix="", output_file=None):
     """
     Plots the data provided in model_data.
     """
@@ -106,16 +117,27 @@ def plot_data(model_data, metric, neighbors, title_suffix="", output_file=None):
 
     plt.figure(figsize=(12, 8))
     
-    markers = ['o', 's', '^', 'D', 'v', '<', '>', 'p', '*', 'h']
+    if all_labels is None:
+        all_labels = list(model_data.keys())
+        
+    base_labels = sorted(set(get_base_label(l) for l in all_labels))
+    colors = plt.cm.tab10.colors
+    if len(base_labels) > 10:
+        colors = plt.cm.tab20.colors
+    markers = ['o', 's', '^', 'D', 'v', '<', '>', 'p', '*', 'h', 'X', 'P', 'd']
     
-    for i, (label, data) in enumerate(model_data.items()):
+    for label, data in model_data.items():
+        base = get_base_label(label)
+        idx = base_labels.index(base)
+        c = colors[idx % len(colors)]
+        m = markers[idx % len(markers)]
+        
         sorted_indices = sorted(range(len(data['t'])), key=lambda k: data['t'][k])
         t_sorted = [data['t'][k] for k in sorted_indices]
         metric_sorted = [data['metric'][k] for k in sorted_indices]
         
-        marker = markers[i % len(markers)]
-        plt.scatter(t_sorted, metric_sorted, label=label, marker=marker, alpha=0.7, s=50)
-        plt.plot(t_sorted, metric_sorted, alpha=0.3)
+        plt.scatter(t_sorted, metric_sorted, label=label, marker=m, color=c, alpha=0.7, s=50)
+        plt.plot(t_sorted, metric_sorted, color=c, alpha=0.3)
 
     plt.title(f'{metric} vs t Threshold (Neighbors={neighbors}) {title_suffix}')
     plt.xlabel('t Threshold')
@@ -138,10 +160,12 @@ def plot_data(model_data, metric, neighbors, title_suffix="", output_file=None):
 
 def plot_metric_by_threshold(data_dir, metric, neighbors, output_file=None):
     model_data = load_data(data_dir, metric, neighbors)
-    plot_data(model_data, metric, neighbors, output_file=output_file)
+    all_labels = list(model_data.keys())
+    plot_data(model_data, metric, neighbors, all_labels=all_labels, output_file=output_file)
 
 def plot_metric_split_by_user_item(data_dir, metric, neighbors, output_prefix=None):
     model_data = load_data(data_dir, metric, neighbors)
+    all_labels = list(model_data.keys())
     
     user_data = {k: v for k, v in model_data.items() if v['type'] == 'User'}
     item_data = {k: v for k, v in model_data.items() if v['type'] == 'Item'}
@@ -154,13 +178,14 @@ def plot_metric_split_by_user_item(data_dir, metric, neighbors, output_prefix=No
         output_item = None
         
     print("Plotting User Models...")
-    plot_data(user_data, metric, neighbors, title_suffix="(User Models)", output_file=output_user)
+    plot_data(user_data, metric, neighbors, all_labels=all_labels, title_suffix="(User Models)", output_file=output_user)
     
     print("Plotting Item Models...")
-    plot_data(item_data, metric, neighbors, title_suffix="(Item Models)", output_file=output_item)
+    plot_data(item_data, metric, neighbors, all_labels=all_labels, title_suffix="(Item Models)", output_file=output_item)
 
 def plot_metric_split_by_sim(data_dir, metric, neighbors, output_prefix=None):
     model_data = load_data(data_dir, metric, neighbors)
+    all_labels = list(model_data.keys())
     
     # Split into 4 groups
     user_cosine = {}
@@ -198,16 +223,16 @@ def plot_metric_split_by_sim(data_dir, metric, neighbors, output_prefix=None):
         p_user_cos = p_user_jac = p_item_cos = p_item_jac = None
 
     print("Plotting User Models (Cosine)...")
-    plot_data(user_cosine, metric, neighbors, title_suffix="(User - Cosine)", output_file=p_user_cos)
+    plot_data(user_cosine, metric, neighbors, all_labels=all_labels, title_suffix="(User - Cosine)", output_file=p_user_cos)
     
     print("Plotting User Models (Jaccard)...")
-    plot_data(user_jaccard, metric, neighbors, title_suffix="(User - Jaccard)", output_file=p_user_jac)
+    plot_data(user_jaccard, metric, neighbors, all_labels=all_labels, title_suffix="(User - Jaccard)", output_file=p_user_jac)
     
     print("Plotting Item Models (Cosine)...")
-    plot_data(item_cosine, metric, neighbors, title_suffix="(Item - Cosine)", output_file=p_item_cos)
+    plot_data(item_cosine, metric, neighbors, all_labels=all_labels, title_suffix="(Item - Cosine)", output_file=p_item_cos)
     
     print("Plotting Item Models (Jaccard)...")
-    plot_data(item_jaccard, metric, neighbors, title_suffix="(Item - Jaccard)", output_file=p_item_jac)
+    plot_data(item_jaccard, metric, neighbors, all_labels=all_labels, title_suffix="(Item - Jaccard)", output_file=p_item_jac)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Plot metric vs t threshold.")
