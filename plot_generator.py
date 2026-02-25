@@ -141,7 +141,8 @@ def plot_3d(model_data, x_metric, y_metric, z_metric, neighbors, all_labels=None
     colors = pcolors.qualitative.Plotly
     if len(base_labels) > 10:
         colors = pcolors.qualitative.Alphabet
-    markers = ['circle', 'square', 'diamond', 'cross', 'x', 'triangle-up', 'triangle-down', 'pentagon', 'hexagon', 'star']
+    markers = ['circle', 'circle-open', 'cross', 'diamond', 'diamond-open', 'square', 'square-open', 'x']
+
 
     for label, data in model_data.items():
         base = get_base_label(label)

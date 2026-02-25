@@ -108,14 +108,14 @@ class ParetoPlotter3D:
         metrics: list of 3 metric names
         directions: list of 3 strings, 'max' or 'min'. Defaults to ['max', 'max', 'max'].
         """
-        if len(metrics) != 3:
-            raise ValueError("Exactly 3 metrics must be specified for 3D plotting.")
+        # if len(metrics) != 3:
+        #     raise ValueError("Exactly 3 metrics must be specified for 3D plotting.")
 
         if directions is None:
             directions = ['max', 'max', 'max']
         
-        if len(directions) != 3:
-            raise ValueError("Exactly 3 directions must be specified.")
+        # if len(directions) != 3:
+        #     raise ValueError("Exactly 3 directions must be specified.")
 
         if self.df is None:
             self.load_data()

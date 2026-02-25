@@ -47,7 +47,7 @@ import argparse
 
 if __name__ == "__main__":
 
-    n_metrics = 3
+    n_metrics = 2
     parser = argparse.ArgumentParser(description="3D Pareto Frontier Plotting")
 
     parser.add_argument("--data_folder", type=str, default=DEFAULT_DATA_FOLDER, 
@@ -84,11 +84,11 @@ if __name__ == "__main__":
                 lambda row: f"{row['Algorithm']}_{row['preposp']}", axis=1
             )
 
-        plotter.plot_pareto_3d(args.metrics, directions=args.directions, output_file=args.output_file)
+        # plotter.plot_pareto_3d(args.metrics, directions=args.directions, output_file=args.output_file)
         
         if args.compute_hypervolume:
             print("Calculating Hypervolume...")
-            hv_output_file = "hypervolume_results.csv"
+            hv_output_file = "efficency.csv"
             plotter.calculate_hypervolume(args.metrics, directions=args.directions, output_file=hv_output_file)
 
         print("Finished 3D Pareto Plotting.")
