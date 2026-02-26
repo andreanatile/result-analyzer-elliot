@@ -129,6 +129,127 @@ def plot_2d(model_data, x_metric, y_metric, neighbors, all_labels=None, title_su
     plt.close()
 
 
+def plot_2d_combined(group_data_by_nn, x_metric, y_metric, neighbor_values, all_labels=None, title_suffix="", output_file=None):
+    if not any(group_data_by_nn.values()): return
+    
+    fig, axes = plt.subplots(1, len(neighbor_values), figsize=(6 * len(neighbor_values), 8))
+    if len(neighbor_values) == 1:
+        axes = [axes]
+        
+    if all_labels is None:
+        all_labels = set()
+        for nn, m_data in group_data_by_nn.items():
+            all_labels.update(m_data.keys())
+        all_labels = list(all_labels)
+        
+    base_labels = sorted(set(get_base_label(l) for l in all_labels))
+    colors = plt.cm.tab10.colors
+    if len(base_labels) > 10:
+        colors = plt.cm.tab20.colors
+    markers = ['o', 's', '^', 'D', 'v', '<', '>', 'p', '*', 'h', 'X', 'P', 'd']
+
+    for i, nn in enumerate(neighbor_values):
+        ax = axes[i]
+        model_data = group_data_by_nn.get(nn, {})
+        for label, data in model_data.items():
+            base = get_base_label(label)
+            idx = base_labels.index(base)
+            c = colors[idx % len(colors)]
+            m = markers[idx % len(markers)]
+            
+            combined = sorted(zip(data[x_metric], data[y_metric]), key=lambda k: k[0])
+            x_vals, y_vals = zip(*combined) if combined else ([], [])
+            ax.scatter(x_vals, y_vals, label=label if i == 0 else "", marker=m, color=c, alpha=0.8, s=60)
+            ax.plot(x_vals, y_vals, color=c, alpha=0.4, linewidth=1.5)
+
+        ax.set_title(f'{x_metric} vs {y_metric} (nn={nn})')
+        ax.set_xlabel(x_metric)
+        ax.set_ylabel(y_metric)
+        ax.grid(True, linestyle='--', alpha=0.6)
+
+    fig.suptitle(f'{title_suffix}')
+    
+    handles, labels = [], []
+    for ax in axes:
+        for h, l in zip(*ax.get_legend_handles_labels()):
+            if l not in labels and l != "":
+                handles.append(h)
+                labels.append(l)
+
+    fig.legend(handles, labels, bbox_to_anchor=(1.0, 1.0), loc='upper left', fontsize='small')
+    plt.tight_layout()
+    if output_file:
+        os.makedirs(os.path.dirname(output_file), exist_ok=True)
+        plt.savefig(output_file, bbox_inches='tight')
+    plt.close()
+
+
+def plot_3d_combined(group_data_by_nn, x_metric, y_metric, z_metric, neighbor_values, all_labels=None, title_suffix="", output_file=None):
+    from plotly.subplots import make_subplots
+    if not any(group_data_by_nn.values()): return
+    
+    fig = make_subplots(
+        rows=1, cols=len(neighbor_values),
+        specs=[[{'type': 'scatter3d'} for _ in neighbor_values]],
+        subplot_titles=[f"nn={nn}" for nn in neighbor_values]
+    )
+
+    if all_labels is None:
+        all_labels = set()
+        for nn, m_data in group_data_by_nn.items():
+            all_labels.update(m_data.keys())
+        all_labels = list(all_labels)
+        
+    base_labels = sorted(set(get_base_label(l) for l in all_labels))
+    import plotly.colors as pcolors
+    colors = pcolors.qualitative.Plotly
+    if len(base_labels) > 10:
+        colors = pcolors.qualitative.Alphabet
+    markers = ['circle', 'circle-open', 'cross', 'diamond', 'diamond-open', 'square', 'square-open', 'x']
+
+    show_legend = set()
+
+    for i, nn in enumerate(neighbor_values):
+        model_data = group_data_by_nn.get(nn, {})
+        for label, data in model_data.items():
+            base = get_base_label(label)
+            idx = base_labels.index(base)
+            c = colors[idx % len(colors)]
+            m = markers[idx % len(markers)]
+            
+            combined = sorted(zip(data[x_metric], data[y_metric], data[z_metric]), key=lambda k: k[0])
+            x_v, y_v, z_v = zip(*combined) if combined else ([], [], [])
+            
+            show_l = label not in show_legend
+            if show_l:
+                show_legend.add(label)
+
+            fig.add_trace(go.Scatter3d(
+                x=x_v, y=y_v, z=z_v, mode='lines+markers', name=label,
+                marker=dict(size=4, color=c, symbol=m), line=dict(width=4, color=c),
+                text=[f"{label}<br>{x_metric}:{x:.3f}<br>{y_metric}:{y:.3f}<br>{z_metric}:{z:.3f}" for x, y, z in
+                      zip(x_v, y_v, z_v)],
+                showlegend=show_l
+            ), row=1, col=i+1)
+
+    fig.update_layout(
+        title=f'3D: {x_metric} vs {y_metric} vs {z_metric} {title_suffix}',
+        margin=dict(l=0, r=0, b=0, t=50), legend=dict(x=0, y=1)
+    )
+    
+    for i in range(1, len(neighbor_values) + 1):
+        suffix = str(i) if i > 1 else ""
+        if hasattr(fig.layout, f'scene{suffix}'):
+            getattr(fig.layout, f'scene{suffix}').xaxis.title = x_metric
+            getattr(fig.layout, f'scene{suffix}').yaxis.title = y_metric
+            getattr(fig.layout, f'scene{suffix}').zaxis.title = z_metric
+        
+    if output_file:
+        os.makedirs(os.path.dirname(output_file), exist_ok=True)
+        if not output_file.endswith(".html"): output_file += ".html"
+        fig.write_html(output_file)
+
+
 def plot_3d(model_data, x_metric, y_metric, z_metric, neighbors, all_labels=None, title_suffix="", output_file=None):
     if not model_data: return
     fig = go.Figure()
@@ -173,7 +294,7 @@ def plot_3d(model_data, x_metric, y_metric, z_metric, neighbors, all_labels=None
 # MAIN AUTOMATION
 # ==============================================================================
 
-def run_automation(data_dir, metrics, split_sim, split_type):
+def run_automation(data_dir, metrics, split_sim, split_type, combined_nn=False):
     neighbor_values = [50, 100, 250]
     is_3d = (len(metrics) == 3)
 
@@ -181,6 +302,51 @@ def run_automation(data_dir, metrics, split_sim, split_type):
         main_folder = f"{metrics[0]}_vs_{metrics[1]}_vs_{metrics[2]}"
     else:
         main_folder = f"{metrics[0]}_vs_{metrics[1]}"
+
+    if combined_nn:
+        print(f"Inizio generazione batch (combined) per: {main_folder}")
+        all_data_by_nn = {}
+        for nn in neighbor_values:
+            model_data = load_data(data_dir, metrics, nn)
+            all_data_by_nn[nn] = model_data
+
+        groups_combined = {}
+        if split_sim:
+            for g_name, g_cond in [
+                ("User_Cosine", lambda v: v['type'] == 'User' and v['sim'].lower() in ['cosine', 'angular']),
+                ("User_Jaccard", lambda v: v['type'] == 'User' and v['sim'].lower() == 'jaccard'),
+                ("Item_Cosine", lambda v: v['type'] == 'Item' and v['sim'].lower() in ['cosine', 'angular']),
+                ("Item_Jaccard", lambda v: v['type'] == 'Item' and v['sim'].lower() == 'jaccard')
+            ]:
+                groups_combined[g_name] = {nn: {k: v for k, v in all_data_by_nn[nn].items() if g_cond(v)} for nn in neighbor_values if nn in all_data_by_nn}
+        elif split_type:
+            for g_name, g_cond in [
+                ("User", lambda v: v['type'] == 'User'),
+                ("Item", lambda v: v['type'] == 'Item')
+            ]:
+                groups_combined[g_name] = {nn: {k: v for k, v in all_data_by_nn[nn].items() if g_cond(v)} for nn in neighbor_values if nn in all_data_by_nn}
+        else:
+            groups_combined["All_Models"] = all_data_by_nn
+
+        base_out_dir = os.path.join("plots", main_folder, "combined_nn")
+        os.makedirs(base_out_dir, exist_ok=True)
+        
+        for g_name, g_data_by_nn in groups_combined.items():
+            if not any(g_data_by_nn.values()): continue
+            
+            all_labels = set()
+            for nn, md in g_data_by_nn.items():
+                all_labels.update(md.keys())
+            all_labels = list(all_labels)
+            
+            ext = ".html" if is_3d else ".png"
+            out_path = os.path.join(base_out_dir, f"{g_name}{ext}")
+
+            if is_3d:
+                plot_3d_combined(g_data_by_nn, metrics[0], metrics[1], metrics[2], neighbor_values, all_labels=all_labels, title_suffix=f"({g_name})", output_file=out_path)
+            else:
+                plot_2d_combined(g_data_by_nn, metrics[0], metrics[1], neighbor_values, all_labels=all_labels, title_suffix=f"({g_name})", output_file=out_path)
+        return
 
     print(f"Inizio generazione batch per: {main_folder}")
 
@@ -231,10 +397,11 @@ if __name__ == "__main__":
     parser.add_argument("--metrics", nargs='+', required=True, help="2 o 3 metriche (X Y [Z])")
     parser.add_argument("--split", action="store_true")
     parser.add_argument("--split_sim", action="store_true")
+    parser.add_argument("--combined_nn", action="store_true", help="Plot all neighbors in one figure with subplots")
     args = parser.parse_args()
 
     if len(args.metrics) not in [2, 3]:
         print("Errore: specifica 2 o 3 metriche.")
     else:
-        run_automation(args.data_dir, args.metrics, args.split_sim, args.split)
+        run_automation(args.data_dir, args.metrics, args.split_sim, args.split, args.combined_nn)
         print("\nBatch completato. Controlla la cartella 'plots'.")
