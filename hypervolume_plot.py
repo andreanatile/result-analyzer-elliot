@@ -50,65 +50,86 @@ def create_hypervolume_charts(csv_file):
 
     for model_type in model_types:
         # 1. Filter the dataframe for the current type (User or Item)
-        filtered_df = df[df['Type'] == model_type].copy()
+        type_df = df[df['Type'] == model_type].copy()
 
         # If there are no models of this type in the file, skip to the next
-        if filtered_df.empty:
+        if type_df.empty:
             print(f"No models of type '{model_type}' found in the file.")
             continue
 
-        # 2. Sort in descending order based on Hypervolume
-        sorted_df = filtered_df.sort_values(by='Hypervolume', ascending=False)
+        # Check if we have threshold data
+        has_threshold = 'Threshold' in type_df.columns and not type_df['Threshold'].isna().all()
 
-        # 3. Chart creation
-        plt.figure(figsize=(12, 6))  # Set a good size for the chart
+        if has_threshold:
+            thresholds = type_df['Threshold'].dropna().unique()
+            for thres in thresholds:
+                thres_str = f"{thres:.2f}".replace('.', '_')
+                filtered_df = type_df[type_df['Threshold'] == thres].copy()
+                
+                title_suffix = f" (Threshold {thres})"
+                file_suffix = f"_threshold_{thres_str}"
+                
+                _plot_single_chart(filtered_df, model_type, x_axis, csv_file, title_suffix, file_suffix)
+        else:
+            _plot_single_chart(type_df, model_type, x_axis, csv_file, "", "")
 
-        # Draw the bar chart using Seaborn
-        ax = sns.barplot(
-            data=sorted_df,
-            x=x_axis,
-            y='Hypervolume',
-            palette='viridis'  # An elegant and scientific color palette
-        )
+def _plot_single_chart(filtered_df, model_type, x_axis, csv_file, title_suffix, file_suffix):
+    # 2. Sort in descending order based on Hypervolume
+    sorted_df = filtered_df.sort_values(by='Hypervolume', ascending=False)
 
-        # 4. Aesthetic customization (Titles, Axes, etc.)
-        base_filename = os.path.basename(csv_file).replace('.csv', '')
-        clean_title_name = base_filename.replace('_', ' ').title()
+    # 3. Chart creation
+    plt.figure(figsize=(12, 6))  # Set a good size for the chart
 
-        plt.title(f'Hypervolume Comparison - {model_type} Models\n({clean_title_name})', fontsize=16, fontweight='bold')
-        plt.xlabel('Model Name', fontsize=12)
-        plt.ylabel('Hypervolume Value', fontsize=12)
+    # Draw the bar chart using Seaborn
+    ax = sns.barplot(
+        data=sorted_df,
+        x=x_axis,
+        y='Hypervolume',
+        palette='viridis'  # An elegant and scientific color palette
+    )
 
-        # Rotate X-axis labels by 45 degrees so they don't overlap
-        plt.xticks(rotation=45, ha='right')
+    # 4. Aesthetic customization (Titles, Axes, etc.)
+    base_filename = os.path.basename(csv_file).replace('.csv', '')
+    clean_title_name = base_filename.replace('_', ' ').title()
 
-        # Add a horizontal grid to make values easier to read
-        plt.grid(axis='y', linestyle='--', alpha=0.7)
+    plt.title(f'Hypervolume Comparison - {model_type} Models\n({clean_title_name}){title_suffix}', fontsize=16, fontweight='bold')
+    plt.xlabel('Model Name', fontsize=12)
+    plt.ylabel('Hypervolume Value', fontsize=12)
 
-        # Optimize spacing so labels aren't cut off
-        plt.tight_layout()
+    # Rotate X-axis labels by 45 degrees so they don't overlap
+    plt.xticks(rotation=45, ha='right')
 
-        # 5. Save the chart in the same directory as the CSV file
-        output_dir = os.path.dirname(csv_file)
-        if output_dir == '':
-            output_dir = '.'  # Current directory if no path is provided
+    # Add a horizontal grid to make values easier to read
+    plt.grid(axis='y', linestyle='--', alpha=0.7)
 
-        output_name = os.path.join(output_dir, f"chart_{base_filename}_{model_type.lower()}.png")
-        plt.savefig(output_name, dpi=300)
-        print(f"-> Chart saved: {output_name}")
+    # Optimize spacing so labels aren't cut off
+    plt.tight_layout()
 
-        # Close the plot to free up memory
-        plt.close()
+    # 5. Save the chart in the same directory as the CSV file
+    output_dir = os.path.dirname(csv_file)
+    if output_dir == '':
+        output_dir = '.'  # Current directory if no path is provided
+
+    output_name = os.path.join(output_dir, f"chart_{base_filename}_{model_type.lower()}{file_suffix}.png")
+    plt.savefig(output_name, dpi=300)
+    print(f"-> Chart saved: {output_name}")
+
+    # Close the plot to free up memory
+    plt.close()
 
 
 # ==========================================
 # COMMAND LINE INTERFACE SETUP
 # ==========================================
 if __name__ == "__main__":
-    csv_path = './hypervolume_results/efficency.csv'
+    parser = argparse.ArgumentParser(description="Generate Hypervolume Bar Charts")
+    parser.add_argument("--csv_path", type=str, default="efficency.csv",
+                        help="Path to the efficency.csv file")
+    
+    args = parser.parse_args()
 
-    if os.path.isfile(csv_path):
-        create_hypervolume_charts(csv_path)
+    if os.path.isfile(args.csv_path):
+        create_hypervolume_charts(args.csv_path)
     else:
-        print(f"Error: The file '{csv_path}' does not exist.")
+        print(f"Error: The file '{args.csv_path}' does not exist.")
         print("Please check the path and try again.")
