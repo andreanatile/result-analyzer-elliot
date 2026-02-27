@@ -46,36 +46,46 @@ DEFAULT_OUTPUT_FILE = "pareto_3d.html"
 import argparse
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Multi-Objective Analysis and Pareto Plotting")
 
-    n_metrics = 2
-    parser = argparse.ArgumentParser(description="3D Pareto Frontier Plotting")
+    parser.add_argument("--data_folder", type=str, required=True,
+                        help="Folder containing CSV files")
+    parser.add_argument("--metrics", nargs='+', required=True,
+                        help="List of 2 or 3 metrics to plot (e.g., nDCG Gini)")
+    parser.add_argument("--directions", nargs='+', required=True,
+                        help="Directions ('max' or 'min') for each metric")
+    parser.add_argument("--output_file", type=str, default="pareto_plot",
+                        help="Base name for the output file(s)")
 
-    parser.add_argument("--data_folder", type=str, default=DEFAULT_DATA_FOLDER, 
-                        help=f"Path to the data folder (default: {DEFAULT_DATA_FOLDER})")
-    
-    parser.add_argument("--metrics", nargs=n_metrics, default=DEFAULT_METRICS,
-                        help=f"List of 3 metrics to plot (default: {DEFAULT_METRICS})")
-    
-    parser.add_argument("--directions", nargs=n_metrics, choices=['max', 'min'], default=DEFAULT_DIRECTIONS,
-                        help=f"Optimization direction for each metric (default: {DEFAULT_DIRECTIONS})")
-    
-    parser.add_argument("--output_file", type=str, default=DEFAULT_OUTPUT_FILE, 
-                        help=f"Output HTML file name (default: {DEFAULT_OUTPUT_FILE})")
+    # --- NEW FLAG for Log Scale ---
+    parser.add_argument("--log_metrics", nargs='+', default=[],
+                        help="List of metrics to plot on a logarithmic scale (e.g., --log_metrics Gini)")
 
-    parser.add_argument("--compute_hypervolume", action="store_true", 
+    parser.add_argument("--split_threshold", action="store_true",
+                        help="Generate separate plots for each target threshold value")
+    parser.add_argument("--split_sim", action="store_true",
+                        help="Generate separate plots by similarity metric (cosine/jaccard)")
+    parser.add_argument("--compute_hypervolume", action="store_true",
                         help="Compute and save Hypervolume metrics for the Pareto frontier")
 
     args = parser.parse_args()
 
-    print(f"Starting 3D Pareto Plotting...")
+    print(f"Starting Pareto Plotting...")
     print(f"Data Folder: {args.data_folder}")
     print(f"Metrics: {args.metrics}")
     print(f"Directions: {args.directions}")
-    
+    if args.log_metrics:
+        print(f"Logarithmic Scale applied to: {args.log_metrics}")
+
+    if len(args.metrics) not in [2, 3]:
+        raise ValueError("Error: You must provide exactly 2 or 3 metrics for plotting.")
+    if len(args.metrics) != len(args.directions):
+        raise ValueError("Error: The number of metrics and directions must be identical.")
+
     try:
         plotter = ParetoPlotter3D(args.data_folder)
         plotter.load_data()
-        
+
         # Differentiate KNNFairness models by their 'preposp' method
         if 'preposp' in plotter.df.columns:
             mask = plotter.df['Algorithm'].str.contains('KNNfairness', case=False, na=False)
@@ -84,7 +94,15 @@ if __name__ == "__main__":
                 lambda row: f"{row['Algorithm']}_{row['preposp']}", axis=1
             )
 
-        # plotter.plot_pareto_3d(args.metrics, directions=args.directions, output_file=args.output_file)
+        # Plot the frontiers with log scaling capability
+        plotter.plot_pareto(
+            metrics=args.metrics,
+            directions=args.directions,
+            split_sim=args.split_sim,
+            split_threshold=args.split_threshold,
+            log_metrics=args.log_metrics,
+            output_file=args.output_file
+        )
         
         if args.compute_hypervolume:
             print("Calculating Hypervolume...")
