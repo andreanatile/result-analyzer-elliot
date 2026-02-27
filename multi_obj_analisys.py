@@ -109,7 +109,7 @@ if __name__ == "__main__":
             only_pareto=args.only_pareto
         )
         
-        if args.compute_hypervolume:
+        if args.compute_hypervolume or args.hv_split_threshold:
             print("Calculating Hypervolume...")
             hv_output_file = "efficency.csv"
             plotter.calculate_hypervolume(
