@@ -330,67 +330,143 @@ class ParetoPlotter3D:
             fig.write_html(output_file)
             print(f"-> Saved 3D plot: {output_file}")
 
-    def calculate_hypervolume(self, metrics, directions=None, absolute_ref_point=None, output_file=None):
-        """Calculates exact Hypervolume values using PyMoo."""
-        if HV is None:
-            print("Error: pymoo library is not installed. Run `pip install pymoo`.")
-            return None
-
+    def calculate_hypervolume(self, metrics, directions=None, output_file=None):
+        """
+        Calculates the true Hypervolume indicator for the Pareto frontier of each algorithm.
+        Uses the 'pymoo' library to compute the union volume of the non-dominated points.
+        """
         if self.df is None:
             self.load_data()
 
+        if directions is None:
+            directions = ['max', 'max', 'max']
+
+        # if len(metrics) != 3 or len(directions) != 3:
+        #     raise ValueError("Metrics and directions must have length 3.")
+
+        # 1. Calculate Reference Point (Worst Case + Offset)
+        ref_point = []
+        for i, metric in enumerate(metrics):
+            valid_values = self.df[metric].dropna()
+            if valid_values.empty:
+                ref_point.append(0.0)
+                continue
+
+            if directions[i] == 'max':
+                # Worst case for maximization is the minimum value.
+                # We want the reference point to be slightly WORSE (smaller) than the minimum.
+                # worst_val = valid_values.min()
+                # if worst_val > 0:
+                #     ref_point.append(worst_val * 0.99)
+                # elif worst_val < 0:
+                #     ref_point.append(worst_val * 1.01)
+                # else:
+                #     ref_point.append(-0.01)  # If exactly 0
+                ref_point.append(-0.01)
+            else:
+                # Worst case for minimization is the maximum value.
+                # We want the reference point to be slightly WORSE (larger) than the maximum.
+                # worst_val = valid_values.max()
+                # if worst_val > 0:
+                #     ref_point.append(worst_val * 1.01)
+                # elif worst_val < 0:
+                #     ref_point.append(worst_val * 0.99)
+                # else:
+                #     ref_point.append(0.01)  # If exactly 0
+                ref_point.append(1.01)
+
+        print(f"Reference Point for Hypervolume (Original Scale): {dict(zip(metrics, ref_point))}")
+
+        # Prepare reference point for Pymoo (which assumes strict minimization)
+        # So 'max' metrics must be inverted (multiplied by -1)
         pymoo_ref = []
         for i in range(len(metrics)):
             if directions[i] == 'max':
-                pymoo_ref.append(-absolute_ref_point[i])
+                pymoo_ref.append(-ref_point[i])
             else:
-                pymoo_ref.append(absolute_ref_point[i])
+                pymoo_ref.append(ref_point[i])
 
         ref_array = np.array(pymoo_ref)
+
+        # Initialize the Hypervolume indicator with our reference point
         hv_indicator = HV(ref_point=ref_array)
 
         results = []
-        groupby_cols = ['Algorithm', 'sim'] if 'sim' in self.df.columns else ['Algorithm']
+        types = ['User', 'Item']  # Adjust if your 'Type' column contains other categories
 
-        for group_keys, algo_df in self.df.groupby(groupby_cols, dropna=False):
-            algo = group_keys[0] if isinstance(group_keys, tuple) else group_keys
-            sim = group_keys[1] if isinstance(group_keys, tuple) else None
-            display_name = f"{algo} ({sim})" if pd.notna(sim) else algo
+        # Define how we group the data. Check if 'similarity' exists in your dataframe.
+        # If your column is named differently (e.g., 'sim'), change it here!
+        if 'sim' in self.df.columns:
+            groupby_cols = ['Algorithm', 'sim']
+        else:
+            print("Warning: 'similarity' column not found. Grouping only by Algorithm.")
+            groupby_cols = ['Algorithm']
 
-            pareto_df = self._get_pareto_frontier(algo_df, metrics, directions)
-            if pareto_df.empty:
+        for model_type in types:
+            type_df = self.df[self.df['Type'] == model_type]
+            if type_df.empty:
                 continue
 
-            front_points = []
-            for _, row in pareto_df.iterrows():
-                point = []
-                for i, metric in enumerate(metrics):
-                    val = row[metric]
-                    point.append(-val if directions[i] == 'max' else val)
-                front_points.append(point)
+            # Group by multiple columns. dropna=False ensures algorithms WITHOUT
+            # a similarity metric (like random baselines) are not deleted.
+            for group_keys, algo_df in type_df.groupby(groupby_cols, dropna=False):
 
-            try:
-                total_hv = hv_indicator(np.array(front_points))
-            except Exception:
-                total_hv = 0.0
+                # Extract the names cleanly based on how many columns we grouped by
+                if isinstance(group_keys, tuple):
+                    algo = group_keys[0]
+                    sim = group_keys[1]
+                    # Create a combined display name (e.g., "ItemKNN (cosine)")
+                    display_name = f"{algo} ({sim})" if pd.notna(sim) else algo
+                else:
+                    algo = group_keys
+                    sim = None
+                    display_name = algo
 
-            model_type = algo_df['Type'].iloc[0] if 'Type' in algo_df.columns else (
-                'User' if 'user' in algo.lower() else 'Item')
+                # Get the Pareto front points for this specific Algorithm+Similarity combo
+                pareto_df = self._get_pareto_frontier(algo_df, metrics, directions)
 
-            results.append({
-                'Type': model_type,
-                'Algorithm': algo,
-                'Similarity': sim,
-                'Algorithm_Variant': display_name,
-                'Hypervolume': total_hv,
-                'Points_in_Frontier': len(pareto_df),
-                'Total_Points': len(algo_df)
-            })
+                if pareto_df.empty:
+                    continue
 
-        results_df = pd.DataFrame(results).sort_values(by=['Type', 'Hypervolume'], ascending=[True, False])
+                # Extract points for Pymoo
+                front_points = []
+                for _, row in pareto_df.iterrows():
+                    point = []
+                    for i, metric in enumerate(metrics):
+                        val = row[metric]
+                        if directions[i] == 'max':
+                            point.append(-val)
+                        else:
+                            point.append(val)
+                    front_points.append(point)
+
+                front_array = np.array(front_points)
+
+                # Calculate Total Hypervolume
+                try:
+                    total_hv = hv_indicator(front_array)
+                except Exception as e:
+                    print(f"Could not compute HV for {display_name}: {e}")
+                    total_hv = 0.0
+
+                # Store the expanded results
+                results.append({
+                    'Type': model_type,
+                    'Algorithm': algo,
+                    'Similarity': sim,  # The isolated similarity metric
+                    'Algorithm_Variant': display_name,  # The combined string for easy plotting
+                    'Hypervolume': total_hv,
+                    'Points_in_Frontier': len(pareto_df),
+                    'Total_Points': len(algo_df)
+                })
+
+        results_df = pd.DataFrame(results)
+
+        # Sort the dataframe so the highest hypervolumes are at the top
+        results_df = results_df.sort_values(by=['Type', 'Hypervolume'], ascending=[True, False])
+
         if output_file:
-            os.makedirs(os.path.dirname(os.path.abspath(output_file)) or '.', exist_ok=True)
             results_df.to_csv(output_file, index=False)
-            print(f"-> Saved Hypervolume results to {output_file}")
+            print(f"Saved Hypervolume results to {output_file}")
 
         return results_df
