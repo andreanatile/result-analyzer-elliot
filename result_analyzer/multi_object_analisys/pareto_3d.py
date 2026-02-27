@@ -149,7 +149,7 @@ class ParetoPlotter3D:
         return df.iloc[is_pareto].copy()
 
     def plot_pareto(self, metrics, directions, split_sim=False, split_threshold=False, log_metrics=None,
-                    output_file="pareto_plot"):
+                    output_file="pareto_plot", only_pareto=False):
         """Main dispatcher that handles slicing the data and triggering 2D or 3D plots."""
         if self.df is None:
             self.load_data()
@@ -218,12 +218,12 @@ class ParetoPlotter3D:
 
                     if len(metrics) == 2:
                         self._plot_2d(df_filtered, metrics, directions, title_suffix=title_suffix,
-                                      log_metrics=log_metrics, output_file=out_name)
+                                      log_metrics=log_metrics, output_file=out_name, only_pareto=only_pareto)
                     elif len(metrics) == 3:
                         self._plot_3d(df_filtered, metrics, directions, title_suffix=title_suffix,
-                                      log_metrics=log_metrics, output_file=out_name)
+                                      log_metrics=log_metrics, output_file=out_name, only_pareto=only_pareto)
 
-    def _plot_2d(self, df_subset, metrics, directions, title_suffix="", log_metrics=None, output_file=None):
+    def _plot_2d(self, df_subset, metrics, directions, title_suffix="", log_metrics=None, output_file=None, only_pareto=False):
         """Generates a 2D Scatterplot using Matplotlib, drawing the Pareto line."""
         plt.figure(figsize=(10, 7))
         algorithms = df_subset['Algorithm'].unique()
@@ -237,7 +237,8 @@ class ParetoPlotter3D:
             c = self.color_map.get(base_algo, '#333333')
             m = self.marker_2d_map.get(base_algo, 'o')
 
-            plt.scatter(algo_df[metrics[0]], algo_df[metrics[1]], color=c, marker=m, alpha=0.3, s=40)
+            if not only_pareto:
+                plt.scatter(algo_df[metrics[0]], algo_df[metrics[1]], color=c, marker=m, alpha=0.3, s=40)
 
             pareto_df = self._get_pareto_frontier(algo_df, metrics, directions)
             if not pareto_df.empty:
@@ -266,7 +267,7 @@ class ParetoPlotter3D:
 
         plt.close()
 
-    def _plot_3d(self, df_subset, metrics, directions, title_suffix="", log_metrics=None, output_file=None):
+    def _plot_3d(self, df_subset, metrics, directions, title_suffix="", log_metrics=None, output_file=None, only_pareto=False):
         """Generates a 3D Scatterplot using Plotly."""
         fig = go.Figure()
         algorithms = df_subset['Algorithm'].unique()
@@ -280,14 +281,15 @@ class ParetoPlotter3D:
             c = self.color_map.get(base_algo, '#333333')
             m = self.marker_3d_map.get(base_algo, 'circle')
 
-            fig.add_trace(go.Scatter3d(
-                x=algo_df[metrics[0]], y=algo_df[metrics[1]], z=algo_df[metrics[2]],
-                mode='markers',
-                marker=dict(size=3, color=c, symbol=m, opacity=0.3),
-                name=f"{algo} (All)",
-                legendgroup=algo,
-                showlegend=False
-            ))
+            if not only_pareto:
+                fig.add_trace(go.Scatter3d(
+                    x=algo_df[metrics[0]], y=algo_df[metrics[1]], z=algo_df[metrics[2]],
+                    mode='markers',
+                    marker=dict(size=3, color=c, symbol=m, opacity=0.3),
+                    name=f"{algo} (All)",
+                    legendgroup=algo,
+                    showlegend=False
+                ))
 
             pareto_df = self._get_pareto_frontier(algo_df, metrics, directions)
             if not pareto_df.empty:
@@ -330,7 +332,7 @@ class ParetoPlotter3D:
             fig.write_html(output_file)
             print(f"-> Saved 3D plot: {output_file}")
 
-    def calculate_hypervolume(self, metrics, directions=None, output_file=None):
+    def calculate_hypervolume(self, metrics, directions=None, split_threshold=False, output_file=None):
         """
         Calculates the true Hypervolume indicator for the Pareto frontier of each algorithm.
         Uses the 'pymoo' library to compute the union volume of the non-dominated points.
@@ -396,11 +398,14 @@ class ParetoPlotter3D:
 
         # Define how we group the data. Check if 'similarity' exists in your dataframe.
         # If your column is named differently (e.g., 'sim'), change it here!
+        groupby_cols = ['Algorithm']
         if 'sim' in self.df.columns:
-            groupby_cols = ['Algorithm', 'sim']
+            groupby_cols.append('sim')
         else:
             print("Warning: 'similarity' column not found. Grouping only by Algorithm.")
-            groupby_cols = ['Algorithm']
+            
+        if split_threshold and 'threshold' in self.df.columns:
+            groupby_cols.append('threshold')
 
         for model_type in types:
             type_df = self.df[self.df['Type'] == model_type]
@@ -414,13 +419,21 @@ class ParetoPlotter3D:
                 # Extract the names cleanly based on how many columns we grouped by
                 if isinstance(group_keys, tuple):
                     algo = group_keys[0]
-                    sim = group_keys[1]
-                    # Create a combined display name (e.g., "ItemKNN (cosine)")
-                    display_name = f"{algo} ({sim})" if pd.notna(sim) else algo
+                    sim = group_keys[groupby_cols.index('sim')] if 'sim' in groupby_cols else None
+                    threshold = group_keys[groupby_cols.index('threshold')] if 'threshold' in groupby_cols else None
+                    
+                    # Create a combined display name
+                    display_parts = [str(algo)]
+                    if pd.notna(sim):
+                        display_parts.append(f"({sim})")
+                    if threshold is not None and pd.notna(threshold):
+                        display_parts.append(f"[th: {threshold}]")
+                    display_name = " ".join(display_parts)
                 else:
                     algo = group_keys
                     sim = None
-                    display_name = algo
+                    threshold = None
+                    display_name = str(algo)
 
                 # Get the Pareto front points for this specific Algorithm+Similarity combo
                 pareto_df = self._get_pareto_frontier(algo_df, metrics, directions)
@@ -450,7 +463,7 @@ class ParetoPlotter3D:
                     total_hv = 0.0
 
                 # Store the expanded results
-                results.append({
+                res_dict = {
                     'Type': model_type,
                     'Algorithm': algo,
                     'Similarity': sim,  # The isolated similarity metric
@@ -458,7 +471,10 @@ class ParetoPlotter3D:
                     'Hypervolume': total_hv,
                     'Points_in_Frontier': len(pareto_df),
                     'Total_Points': len(algo_df)
-                })
+                }
+                if split_threshold and 'threshold' in self.df.columns:
+                    res_dict['Threshold'] = threshold
+                results.append(res_dict)
 
         results_df = pd.DataFrame(results)
 

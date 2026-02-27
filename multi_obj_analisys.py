@@ -67,6 +67,10 @@ if __name__ == "__main__":
                         help="Generate separate plots by similarity metric (cosine/jaccard)")
     parser.add_argument("--compute_hypervolume", action="store_true",
                         help="Compute and save Hypervolume metrics for the Pareto frontier")
+    parser.add_argument("--hv_split_threshold", action="store_true",
+                        help="Compute Hypervolume metrics separately for each threshold value")
+    parser.add_argument("--only_pareto", action="store_true",
+                        help="Plot only the Pareto frontier points, hiding all other points")
 
     args = parser.parse_args()
 
@@ -101,13 +105,19 @@ if __name__ == "__main__":
             split_sim=args.split_sim,
             split_threshold=args.split_threshold,
             log_metrics=args.log_metrics,
-            output_file=args.output_file
+            output_file=args.output_file,
+            only_pareto=args.only_pareto
         )
         
         if args.compute_hypervolume:
             print("Calculating Hypervolume...")
             hv_output_file = "efficency.csv"
-            plotter.calculate_hypervolume(args.metrics, directions=args.directions, output_file=hv_output_file)
+            plotter.calculate_hypervolume(
+                args.metrics,
+                directions=args.directions,
+                split_threshold=args.hv_split_threshold,
+                output_file=hv_output_file
+            )
 
         print("Finished 3D Pareto Plotting.")
     except Exception as e:
