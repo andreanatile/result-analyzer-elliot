@@ -1,80 +1,107 @@
 import pandas as pd
 import re
 
-
-def analizza_ttest_mirato(file_input, file_output='ttest_filtrati_ANN_vs_KNN.csv', alpha=0.05):
-    print(f"Lettura del file: {file_input}")
-
-    # Leggiamo il TSV. Assegniamo noi i nomi alle colonne
-    df = pd.read_csv(file_input, sep='\t', header=None,
+def analyze_targeted_ttest(input_file, output_file='filtered_ttest_ANN_vs_KNN.csv', alpha=0.05):
+    print(f"Reading file: {input_file}")
+    
+    # Read the TSV. We assign the column names since there is no header
+    df = pd.read_csv(input_file, sep='\t', header=None, 
                      names=['Model_A', 'Model_B', 'Metric', 'p_value'])
 
-    # Funzione avanzata per estrarre le info dal nome del modello
-    def estrai_info(stringa_modello):
-        # Il nome base è la prima parola prima dell'underscore (es. ItemANNOY, ItemKNNfairness, ItemKNN)
-        base = stringa_modello.split('_')[0]
-
-        # Tipo di modello (User o Item)
-        tipo = 'User' if stringa_modello.startswith('User') else 'Item'
-
-        # Estrazione del valore di nn
-        match = re.search(r'nn=(\d+)', stringa_modello)
+    # Advanced function to extract info from the model name
+    def extract_info(model_string):
+        # The base name is the first word before the underscore (e.g., ItemANNOY, ItemKNNfairness, ItemKNN)
+        base = model_string.split('_')[0]
+        
+        # Model type (User or Item)
+        model_type = 'User' if model_string.startswith('User') else 'Item'
+        
+        # Extract the 'nn' value
+        match = re.search(r'nn=(\d+)', model_string)
         nn_val = int(match.group(1)) if match else None
-
-        # Determina se è la BASELINE assoluta (esattamente ItemKNN o UserKNN)
+        
+        # Determine if it is the absolute BASELINE (exactly ItemKNN or UserKNN)
         is_baseline = (base == 'ItemKNN' or base == 'UserKNN')
+        
+        return pd.Series([base, model_type, nn_val, is_baseline])
 
-        return pd.Series([base, tipo, nn_val, is_baseline])
+    print("Extracting information from model names...")
+    df[['Base_A', 'Type_A', 'nn_A', 'is_baseline_A']] = df['Model_A'].apply(extract_info)
+    df[['Base_B', 'Type_B', 'nn_B', 'is_baseline_B']] = df['Model_B'].apply(extract_info)
 
-    print("Estrazione delle informazioni dai nomi dei modelli...")
-    df[['Base_A', 'Type_A', 'nn_A', 'is_baseline_A']] = df['Model_A'].apply(estrai_info)
-    df[['Base_B', 'Type_B', 'nn_B', 'is_baseline_B']] = df['Model_B'].apply(estrai_info)
-
-    # --- FILTRI ---
-
-    # 1. Vogliamo che Model_A sia il modello da testare (ANN, FairANN, KNNfairness)
-    #    e Model_B sia la BASELINE pura (ItemKNN o UserKNN).
-    #    Questo elimina anche i duplicati simmetrici (B vs A).
+    # --- FILTERS ---
+    
+    # 1. We want Model_A to be the target model (ANN, FairANN, KNNfairness) 
+    #    and Model_B to be the pure BASELINE (ItemKNN or UserKNN).
+    #    This also removes symmetric duplicates (B vs A).
     mask_A_is_target = ~df['is_baseline_A']
     mask_B_is_baseline = df['is_baseline_B']
-
-    # 2. Vogliamo confrontare solo Item vs Item o User vs User
+    
+    # 2. We want to compare only Item vs Item or User vs User
     mask_same_type = df['Type_A'] == df['Type_B']
-
-    # 3. Vogliamo confrontare solo a parità di neighbor (nn)
+    
+    # 3. We want to compare only models with the same number of neighbors (nn)
     mask_same_nn = df['nn_A'] == df['nn_B']
+    
+    # Apply all filters simultaneously
+    filtered_df = df[mask_A_is_target & mask_B_is_baseline & mask_same_type & mask_same_nn].copy()
 
-    # Applichiamo tutti i filtri contemporaneamente
-    df_filtrato = df[mask_A_is_target & mask_B_is_baseline & mask_same_type & mask_same_nn].copy()
+    # --- STATISTICAL EVALUATION ---
+    # The difference is significant if p-value < alpha (0.05)
+    filtered_df['Significant_Difference'] = filtered_df['p_value'] < alpha
 
-    # --- VALUTAZIONE STATISTICA ---
-    # La differenza è significativa se p-value < 0.05
-    df_filtrato['Differenza_Significativa'] = df_filtrato['p_value'] < alpha
-
-    # Pulizia delle colonne di supporto
-    df_filtrato = df_filtrato.drop(columns=[
+    # Drop temporary support columns
+    filtered_df = filtered_df.drop(columns=[
         'Base_A', 'Type_A', 'nn_A', 'is_baseline_A',
         'Base_B', 'Type_B', 'nn_B', 'is_baseline_B'
     ])
 
-    # Ordiniamo i risultati per una lettura facilitata:
-    # prima Item/User, poi Metrica, poi Modello Testato, infine Baseline
-    df_filtrato = df_filtrato.sort_values(by=['Model_B', 'Metric', 'Model_A'])
+    # Sort the results for easier reading: 
+    # Baseline first, then Metric, then Tested Model
+    filtered_df = filtered_df.sort_values(by=['Model_B', 'Metric', 'Model_A'])
 
-    # Salvataggio
-    df_filtrato.to_csv(file_output, index=False)
+    # Save to CSV
+    filtered_df.to_csv(output_file, index=False)
+    
+    print(f"\n✅ Filtering completed successfully!")
+    print(f"Total original rows: {len(df)}")
+    print(f"Valid comparisons found (ANN/Fair vs Baseline, same nn, same Type): {len(filtered_df)}")
+    print(f"File saved to: {output_file}")
 
-    print(f"\n✅ Filtraggio completato con successo!")
-    print(f"Righe totali originali: {len(df)}")
-    print(f"Confronti validi trovati (ANN/Fair vs Baseline, stesso nn, stesso Tipo): {len(df_filtrato)}")
-    print(f"File salvato in: {file_output}")
+    # Brief summary
+    significant_count = filtered_df['Significant_Difference'].sum()
+    print(f"Out of these valid comparisons, {significant_count} show a statistically significant difference (p < {alpha}).")
 
-    # Breve riepilogo
-    significativi = df_filtrato['Differenza_Significativa'].sum()
-    print(
-        f"Di questi confronti validi, {significativi} presentano una differenza statisticamente significativa (p < {alpha}).")
+import os
+import glob
 
+result_dir = "result_t_test"
+output_dir = "filtered_t_test"
 
-# Inserisci il nome del tuo file TSV generato da Elliot
-NOME_FILE_TSV = "stat_paired_ttest_cutoff_20_relthreshold_0_2026_02_28_02_15_18.tsv"
-analizza_ttest_mirato(NOME_FILE_TSV)
+# Crea la cartella di output se non esiste
+os.makedirs(output_dir, exist_ok=True)
+
+# Trova tutti i file .tsv nella cartella result_t_test
+tsv_files = glob.glob(os.path.join(result_dir, "*.tsv"))
+
+if not tsv_files:
+    print(f"Nessun file TSV trovato nella cartella: {result_dir}")
+else:
+    print(f"Trovati {len(tsv_files)} file TSV da elaborare in {result_dir}.")
+    
+    for tsv_file in sorted(tsv_files):
+        # Estrai il nome del file senza estensione
+        base_name = os.path.basename(tsv_file)
+        name_without_ext = os.path.splitext(base_name)[0]
+        
+        # Crea un nome di file di output dinamico basato sul nome di input nella nuova cartella
+        output_filename = os.path.join(output_dir, f"filtered_{name_without_ext}.csv")
+        
+        print(f"\n{'='*60}")
+        print(f"Elaborazione di: {base_name}")
+        print(f"{'='*60}")
+        
+        try:
+            analyze_targeted_ttest(tsv_file, output_file=output_filename)
+        except Exception as e:
+            print(f"Errore durante l'elaborazione di {tsv_file}: {e}")

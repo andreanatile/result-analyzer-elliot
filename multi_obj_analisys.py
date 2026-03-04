@@ -111,7 +111,7 @@ if __name__ == "__main__":
         
         if args.compute_hypervolume or args.hv_split_threshold:
             print("Calculating Hypervolume...")
-            hv_output_file = "efficency.csv"
+            hv_output_file = args.output_file + "_hv.csv"
             plotter.calculate_hypervolume(
                 args.metrics,
                 directions=args.directions,

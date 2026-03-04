@@ -49,6 +49,10 @@ class ParetoPlotter3D:
             raise ValueError(f"No CSV files found in {self.data_folder}")
 
         self.df = pd.concat(df_list, ignore_index=True)
+        
+        # Remove any identical rows
+        self.df = self.df.drop_duplicates(ignore_index=True)
+
 
         # Handle the 'sim' column and convert 'angular' to 'cosine'
         if 'sim' in self.df.columns:
