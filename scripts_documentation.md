@@ -5,7 +5,6 @@ This document provides an overview of utility scripts used in the project for  a
 
 ## 1. `create_datasets.py`
 
-### **Purpose**
 The `create_datasets.py` script is responsible for parsing the different results file of elliot creating for each threshold an unique csv file with all the metrics of the different models and integrating the CR (Candidate Ratio) metric.
 
 ### **How It Works Internally**
