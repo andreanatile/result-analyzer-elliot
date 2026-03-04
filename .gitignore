@@ -28,6 +28,7 @@ share/python-wheels/
 *.egg
 MANIFEST
 result_t_test/
+plots/
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
