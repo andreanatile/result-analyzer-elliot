@@ -11,6 +11,7 @@ def load_data(data_dir, metrics, neighbors):
     """
     import re
     
+    data_dir = data_dir.rstrip(os.sep)
     model_data = {}
     csv_metrics = [m for m in metrics if m != "ApproxSeverity"]
 
@@ -287,7 +288,7 @@ def plot_2d_combined(group_data_by_nn, x_metric, y_metric, neighbor_values, all_
                     sig_x_shifted = [x + offset_x for x in sig_x]
                     sig_y_shifted = [y + offset_y for y in sig_y]
                     
-                    plt.scatter(sig_x_shifted, sig_y_shifted, color='black', marker='$*$', s=10, alpha=0.4, zorder=5, label='_nolegend_')
+                    ax.scatter(sig_x_shifted, sig_y_shifted, color='black', marker='$*$', s=10, alpha=0.4, zorder=5, label='_nolegend_')
 
         ax.set_title(f'{x_metric} vs {y_metric} (nn={nn})')
         ax.set_xlabel(x_metric)
